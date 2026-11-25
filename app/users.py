@@ -23,14 +23,19 @@ def normalise_email(email: str) -> str:
     return email.strip().lower()
 
 
+def validate_email(normalised: str) -> None:
+    """Raise InvalidEmailError unless the (already normalised) email is non-empty and has an at-sign."""
+    if not normalised or "@" not in normalised:
+        raise InvalidEmailError("Invalid email address")
+
+
 def create_user(email: str, password: str, role: str, *, engine: Engine | None = None) -> User:
     """Create a user. Everything is validated before anything is written.
 
     Uses `engine` if given, otherwise the engine for WEEKLY_DB_PATH.
     """
     normalised = normalise_email(email)
-    if not normalised or "@" not in normalised:
-        raise InvalidEmailError("Invalid email address")
+    validate_email(normalised)
     if role not in ROLES:
         raise ValueError(f"Role must be one of: {', '.join(ROLES)}")
     password_hash = hash_password(password)  # raises WeakPasswordError

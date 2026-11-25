@@ -151,6 +151,7 @@ def test_tampered_cookie_signs_out(client, ann):
 
 
 def test_cookie_for_deleted_user_signs_out(client, ann, db_engine):
+    create_user("bob@example.com", PW, "member", engine=db_engine)  # keeps setup closed
     login(client)
     assert client.get("/").status_code == 200
     with db_engine.begin() as c:
@@ -187,6 +188,6 @@ def test_logout_get_not_allowed(client, ann):
     assert client.get("/").status_code == 200  # still signed in
 
 
-def test_landing_redirects_to_login_when_signed_out(client):
+def test_landing_redirects_to_login_when_signed_out(client, ann):  # a user exists, so not /setup
     r = client.get("/")
     assert r.status_code == 303 and r.headers["location"] == "/login?next=%2F"
