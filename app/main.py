@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import Engine
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.access import NotAllowed, not_allowed_handler
 from app.auth import get_engine, get_optional_user, router as auth_router, templates
 from app.config import load_settings
 from app.models import User
@@ -18,6 +19,7 @@ app.add_middleware(
     same_site="lax",  # HttpOnly is always set by SessionMiddleware
     https_only=settings.env == "production",
 )
+app.add_exception_handler(NotAllowed, not_allowed_handler)
 app.include_router(auth_router)
 app.include_router(setup_router)
 
