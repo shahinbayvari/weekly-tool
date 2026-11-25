@@ -1,6 +1,8 @@
 """Add, edit, delete and list feedback items. Service layer only; no web routes.
 
-No clock rules here (the window is #12). Only an item's author may change it.
+Writes are only allowed while the submission window is open (see app.cycle), and
+an item can only be changed in the window of the week it was filed under.
+Only an item's author may change it; the owner gets no exemption.
 """
 
 from datetime import datetime, timezone
@@ -9,6 +11,8 @@ from sqlalchemy import Engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import Settings, load_settings
+from app.cycle import Cycle, Schedule, describe
 from app.db import make_engine
 from app.models import FeedbackItem
 
@@ -35,6 +39,28 @@ class UnknownUserError(LookupError):
     """No user has this id."""
 
 
+class WindowClosedError(Exception):
+    """The submission window is closed (or the item belongs to a past week)."""
+
+
+def _current_cycle(now: datetime, settings: Settings | Schedule | None) -> tuple[Cycle, Schedule]:
+    """The cycle at `now` (ValueError if naive, checked before anything else)."""
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+    if settings is None:
+        settings = load_settings()
+    schedule = settings if isinstance(settings, Schedule) else Schedule.from_settings(settings)
+    return describe(now, schedule), schedule
+
+
+def _require_open(now: datetime, settings: Settings | Schedule | None) -> Cycle:
+    cycle, _ = _current_cycle(now, settings)
+    if not cycle.is_open:
+        opens = cycle.next_open.strftime("%A %Y-%m-%d %H:%M %Z")
+        raise WindowClosedError(f"The submission window is closed. It next opens on {opens} ({cycle.next_open.tzinfo}).")
+    return cycle
+
+
 def _validate_text(text: str) -> str:
     """The trimmed text, or raise InvalidTextError. Otherwise the text is untouched."""
     if any(ch in LINE_BREAKS for ch in text):
@@ -52,25 +78,33 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _owned_item(session: Session, item_id: int, user_id: int) -> FeedbackItem:
+def _owned_item(session: Session, item_id: int, user_id: int, cycle: Cycle) -> FeedbackItem:
     item = session.get(FeedbackItem, item_id)
     if item is None:
         raise ItemNotFoundError("Item not found")
     if item.author_id != user_id:
         raise NotAuthorError("Only the author can change this item")
+    if item.week != cycle.week_id:
+        raise WindowClosedError(f"The submission window for week {item.week} is closed; this item can no longer be changed.")
     return item
 
 
 def add_item(
     user_id: int,
-    week: str,
+    now: datetime,
     category: str,
     text: str,
     anonymous: bool = False,
     *,
     engine: Engine | None = None,
+    settings: Settings | Schedule | None = None,
 ) -> FeedbackItem:
-    """Store and return a new item. Everything is validated before anything is written."""
+    """Store and return a new item under the current week. Everything is validated before anything is written.
+
+    `now` must be timezone-aware. Raises WindowClosedError when the window is closed
+    (checked before category and text).
+    """
+    cycle = _require_open(now, settings)
     if category not in CATEGORIES:
         raise ValueError(f"Category must be one of: {', '.join(CATEGORIES)}")
     trimmed = _validate_text(text)
@@ -79,15 +113,15 @@ def add_item(
     engine = engine or make_engine()
     try:
         with Session(engine, expire_on_commit=False) as session:
-            now = _now()
+            stamp = _now()
             item = FeedbackItem(
                 author_id=user_id,
-                week=week,
+                week=cycle.week_id,
                 category=category,
                 text=trimmed,
                 anonymous=bool(anonymous),
-                created_at=now,
-                updated_at=now,
+                created_at=stamp,
+                updated_at=stamp,
             )
             session.add(item)
             try:
@@ -101,14 +135,23 @@ def add_item(
             engine.dispose()
 
 
-def edit_item(item_id: int, user_id: int, text: str, *, engine: Engine | None = None) -> FeedbackItem:
-    """Change the text (same rules as add_item) and updated_at; the author only."""
+def edit_item(
+    item_id: int,
+    user_id: int,
+    now: datetime,
+    text: str,
+    *,
+    engine: Engine | None = None,
+    settings: Settings | Schedule | None = None,
+) -> FeedbackItem:
+    """Change the text (same rules as add_item) and updated_at; the author only, in the item's own open window."""
+    cycle = _require_open(now, settings)
     trimmed = _validate_text(text)
     own_engine = engine is None
     engine = engine or make_engine()
     try:
         with Session(engine, expire_on_commit=False) as session:
-            item = _owned_item(session, item_id, user_id)
+            item = _owned_item(session, item_id, user_id, cycle)
             item.text = trimmed
             item.updated_at = _now()
             session.commit()
@@ -118,26 +161,43 @@ def edit_item(item_id: int, user_id: int, text: str, *, engine: Engine | None = 
             engine.dispose()
 
 
-def delete_item(item_id: int, user_id: int, *, engine: Engine | None = None) -> None:
-    """Remove the item; the author only."""
+def delete_item(
+    item_id: int,
+    user_id: int,
+    now: datetime,
+    *,
+    engine: Engine | None = None,
+    settings: Settings | Schedule | None = None,
+) -> None:
+    """Remove the item; the author only, in the item's own open window."""
+    cycle = _require_open(now, settings)
     own_engine = engine is None
     engine = engine or make_engine()
     try:
         with Session(engine) as session:
-            session.delete(_owned_item(session, item_id, user_id))
+            session.delete(_owned_item(session, item_id, user_id, cycle))
             session.commit()
     finally:
         if own_engine:
             engine.dispose()
 
 
-def set_anonymous(item_id: int, user_id: int, anonymous: bool, *, engine: Engine | None = None) -> FeedbackItem:
-    """Set the anonymous flag to `anonymous`; the author only. Idempotent."""
+def set_anonymous(
+    item_id: int,
+    user_id: int,
+    now: datetime,
+    anonymous: bool,
+    *,
+    engine: Engine | None = None,
+    settings: Settings | Schedule | None = None,
+) -> FeedbackItem:
+    """Set the anonymous flag to `anonymous`; the author only, in the item's own open window. Idempotent."""
+    cycle = _require_open(now, settings)
     own_engine = engine is None
     engine = engine or make_engine()
     try:
         with Session(engine, expire_on_commit=False) as session:
-            item = _owned_item(session, item_id, user_id)
+            item = _owned_item(session, item_id, user_id, cycle)
             item.anonymous = bool(anonymous)
             session.commit()
             return item
