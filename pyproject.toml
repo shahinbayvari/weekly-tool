@@ -1,0 +1,21 @@
+[project]
+name = "weekly-tool"
+version = "0.1.0"
+description = "Weekly Start/Stop/Continue feedback tool"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "httpx",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools]
+packages = ["app"]

@@ -20,7 +20,25 @@ Python, FastAPI, Jinja templates with HTMX, and SQLite. Email is logged to the c
 
 ## Getting started
 
-Install, configuration, run and test instructions will be added once the project skeleton exists (issue 1) and finalised in the README issue (issue 25).
+Requires [uv](https://docs.astral.sh/uv/).
+
+```
+uv sync
+```
+
+Run the tests:
+
+```
+uv run pytest
+```
+
+Start the server (then open http://127.0.0.1:8000/health):
+
+```
+uv run uvicorn app.main:app --reload
+```
+
+Full configuration instructions will be finalised in the README issue (issue 25).
 
 ## Contributing
 
