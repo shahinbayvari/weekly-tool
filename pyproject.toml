@@ -9,6 +9,7 @@ dependencies = [
     "tzdata",
     "sqlalchemy>=2.1.9",
     "alembic>=1.20.1",
+    "argon2-cffi",
 ]
 
 [dependency-groups]
