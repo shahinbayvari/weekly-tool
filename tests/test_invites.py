@@ -125,7 +125,7 @@ def test_lists_in_separate_sections_newest_first(owner, db_engine):
         c.execute(text("UPDATE invites SET created_at='2026-06-01 00:00:00' WHERE email='d@example.com'"))
         c.execute(text("UPDATE invites SET accepted_at='2026-04-01 00:00:00' WHERE email='a@example.com'"))
         c.execute(text("UPDATE invites SET accepted_at='2026-05-01 00:00:00' WHERE email='c@example.com'"))
-    body = owner.get("/invites").text
+    body = re.sub(r"<header.*?</header>", "", owner.get("/invites").text, flags=re.S)  # the header shows the owner's own email
     pending_part, accepted_part = body.split("Accepted invites")
     assert pending_part.index("d@example.com") < pending_part.index("b@example.com")
     assert "2026-06-01" in pending_part and "2026-03-01" in pending_part

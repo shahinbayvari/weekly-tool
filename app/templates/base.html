@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% set page = layout(public_page|default(false)) %}
+  <title>{% block title %}{% endblock %} - {{ page.project_name }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body{% block body_attrs %}{% endblock %}>
+  <header class="site-header">
+    <div class="site-header-row">
+      <span class="site-name">{{ page.project_name }}</span>
+      {% if page.email %}
+      <div class="account">
+        <span>Signed in as {{ page.email }}</span>
+        <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Log out</button></form>
+      </div>
+      {% endif %}
+    </div>
+    {% if page.links %}
+    <nav class="site-nav" aria-label="Main">
+      {% for label, href, current in page.links %}<a href="{{ href }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+    {% endif %}
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

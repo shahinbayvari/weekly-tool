@@ -1,11 +1,7 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Set up</title>
-</head>
-<body>
+{% extends "base.html" %}
+{% set public_page = true %}
+{% block title %}Set up{% endblock %}
+{% block content %}
   <h1>Set up your project</h1>
   {% if error %}<p role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/setup"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -15,5 +11,4 @@
     <label>Confirm password <input type="password" name="confirm_password" autocomplete="new-password" required></label>
     <button type="submit">Create owner account</button>
   </form>
-</body>
-</html>
+{% endblock %}

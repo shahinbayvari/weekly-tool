@@ -1,13 +1,6 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Results</title>
-</head>
-<body>
-  <p>Signed in as {{ email }}</p>
-  <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Sign out</button></form>
+{% extends "base.html" %}
+{% block title %}Results{% endblock %}
+{% block content %}
 
   {% if hidden_until %}
   <p class="hidden-until">Results are hidden until {{ hidden_until }}</p>
@@ -32,5 +25,4 @@
   {% else %}
   <p>No earlier results</p>
   {% endif %}
-</body>
-</html>
+{% endblock %}

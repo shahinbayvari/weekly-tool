@@ -1,11 +1,7 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accept invite</title>
-</head>
-<body>
+{% extends "base.html" %}
+{% set public_page = true %}
+{% block title %}Accept invite{% endblock %}
+{% block content %}
   <h1>Join the team</h1>
   {% if error %}<p role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/invite/{{ token }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -14,5 +10,4 @@
     <label>Confirm password <input type="password" name="confirm_password" autocomplete="new-password" required></label>
     <button type="submit">Create account</button>
   </form>
-</body>
-</html>
+{% endblock %}

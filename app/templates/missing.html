@@ -1,13 +1,6 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Missing submitters</title>
-</head>
-<body>
-  <p>Signed in as {{ email }}</p>
-  <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Sign out</button></form>
+{% extends "base.html" %}
+{% block title %}Missing submitters{% endblock %}
+{% block content %}
 
   <h1>Missing submitters</h1>
   {% if not is_open %}
@@ -26,5 +19,4 @@
   <p>Everyone has submitted</p>
   {% endif %}
   {% endif %}
-</body>
-</html>
+{% endblock %}

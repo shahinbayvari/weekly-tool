@@ -80,7 +80,9 @@ def column(html, name):
 def get(client):
     r = client.get("/reveal")
     assert r.status_code == 200
-    return strip_csrf(r.text)
+    # the shared page header (name, own email, nav, log out) is covered by tests/test_layout.py;
+    # these tests are about the page content, which differs from the header per role
+    return re.sub(r"<header.*?</header>", "", strip_csrf(r.text), flags=re.S)
 
 
 def test_requires_sign_in(db_engine, clock, users):
@@ -158,8 +160,7 @@ def test_script_text_is_escaped(client, db_engine, users):
 def test_no_reactions_history_or_action_items(client, db_engine, users):
     seed(db_engine, users["ann"], "x")
     html = get(client)
-    assert "<button" not in html.replace('<button type="submit">Sign out</button>', "")
-    assert "<form" not in html.replace('<form method="post" action="/logout">', "")
+    assert "<button" not in html and "<form" not in html
     assert "<a " not in html and "<input" not in html
 
 

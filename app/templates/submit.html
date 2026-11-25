@@ -1,15 +1,11 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Submit feedback</title>
+{% extends "base.html" %}
+{% block title %}Submit feedback{% endblock %}
+{% block head %}
   <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
   <script src="/static/htmx.min.js"></script>
-</head>
-<body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
-  <p>Signed in as {{ email }}</p>
-  <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Sign out</button></form>
+{% endblock %}
+{% block body_attrs %} hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'{% endblock %}
+{% block content %}
 
   <div id="notice" role="alert"></div>
 
@@ -28,5 +24,4 @@
     {% with editable = is_open %}{% include "_list.html" %}{% endwith %}
   </section>
   {% endfor %}
-</body>
-</html>
+{% endblock %}

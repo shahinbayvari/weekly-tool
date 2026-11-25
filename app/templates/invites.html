@@ -1,12 +1,6 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Invites</title>
-  <link rel="stylesheet" href="/static/app.css">
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}Invites{% endblock %}
+{% block content %}
   <h1>Invites</h1>
   {% if error %}<p role="alert">{{ error }}</p>{% endif %}
   {% if link %}
@@ -40,5 +34,4 @@
     {% endfor %}
   </ul>
   {% else %}<p>None</p>{% endif %}
-</body>
-</html>
+{% endblock %}

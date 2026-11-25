@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Invite not valid</title>
-</head>
-<body>
+{% extends "base.html" %}
+{% set public_page = true %}
+{% block title %}Invite not valid{% endblock %}
+{% block content %}
   <h1>Invite not valid</h1>
   <p>This invite link is not valid. Ask the owner for a new one.</p>
-</body>
-</html>
+{% endblock %}

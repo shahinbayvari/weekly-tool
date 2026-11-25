@@ -132,11 +132,11 @@ def test_open_page_shows_deadline_with_timezone(client):
 def test_closed_page_message_and_no_forms_or_buttons(client, clock, db_engine, ann):
     seed(db_engine, ann, "kept", "start", now=MID)
     clock.now = CLOSED
-    html = client.get("/submit").text
+    html = re.sub(r"<header.*?</header>", "", client.get("/submit").text, flags=re.S)  # header: tests/test_layout.py
     assert "The window is closed. The next one opens Monday 2026-01-12 09:00 CET (Europe/Amsterdam)" in html
     assert "last deadline was Friday 2026-01-09 17:00 CET (Europe/Amsterdam)" in html
     assert 'id="add-' not in html and 'hx-post="/submit' not in html
-    assert "<button" not in html.replace('<button type="submit">Sign out</button>', "")
+    assert "<button" not in html
     assert "kept" in html  # read-only
 
 

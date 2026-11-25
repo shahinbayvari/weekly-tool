@@ -7,9 +7,10 @@ owner-only route gets a plain 403 "Not allowed" page.
 """
 
 from fastapi import Depends, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 
 from app.auth import current_user
+from app.errors import error_response
 from app.models import User
 
 
@@ -17,8 +18,9 @@ class NotAllowed(Exception):
     """Raised for a signed-in user who lacks the required role."""
 
 
-def not_allowed_handler(request: Request, exc: NotAllowed) -> PlainTextResponse:
-    return PlainTextResponse("Not allowed", status_code=403)
+def not_allowed_handler(request: Request, exc: NotAllowed) -> Response:
+    """403 "Not allowed": an HTML page for browsers (Accept prefers text/html), plain text otherwise."""
+    return error_response(request, 403) or PlainTextResponse("Not allowed", status_code=403)
 
 
 def require_login(user: User = Depends(current_user)) -> User:

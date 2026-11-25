@@ -4,27 +4,75 @@ The session is Starlette's signed-cookie SessionMiddleware (added in app.main);
 it holds only the user id.
 """
 
+import logging
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db import make_engine
-from app.models import User
+from app.models import Project, User
 from app.passwords import verify_password
 from app.security import csrf_context
 from app.users import find_user_by_email
 
+logger = logging.getLogger("app.auth")
 SESSION_KEY = "user_id"
+
+DEFAULT_PROJECT_NAME = "Weekly Feedback"
+MEMBER_LINKS = (("Submit", "/submit"), ("Reveal", "/reveal"))
+OWNER_LINKS = MEMBER_LINKS + (("Invites", "/invites"), ("Missing", "/missing"))
+
+
+@dataclass(frozen=True)
+class Layout:
+    """What templates/base.html shows: the project name and, when signed in, the user and nav."""
+
+    project_name: str = DEFAULT_PROJECT_NAME
+    email: str | None = None
+    links: tuple[tuple[str, str, bool], ...] = ()  # (label, href, is_current_page)
+
+
+def build_layout(request: Request, public: bool = False) -> Layout:
+    """Layout for this request. `public` pages (login, setup, invites) never show the user or nav."""
+    name, user = DEFAULT_PROJECT_NAME, None
+    engine = make_engine()
+    try:
+        with Session(engine) as session:
+            project = session.scalar(select(Project))
+            if project is not None and project.name.strip():
+                name = project.name
+            user_id = request.session.get(SESSION_KEY)
+            if not public and isinstance(user_id, int) and not isinstance(user_id, bool):
+                user = session.get(User, user_id)
+    except SQLAlchemyError:  # e.g. database not migrated yet: still render the page, as signed out
+        logger.exception("could not read the project and user for the page header")
+        name, user = DEFAULT_PROJECT_NAME, None
+    finally:
+        engine.dispose()
+    if user is None:
+        return Layout(project_name=name)
+    path = request.url.path.rstrip("/") or "/"
+    links = OWNER_LINKS if user.role == "owner" else MEMBER_LINKS
+    return Layout(name, user.email, tuple((label, href, href == path) for label, href in links))
+
+
+def layout_context(request: Request) -> dict:
+    """Jinja2 context processor: `layout(public)` is looked up lazily by base.html only,
+    so fragments (HTMX responses) never touch the database for it."""
+    return {"layout": lambda public=False: build_layout(request, public)}
+
 
 templates = Jinja2Templates(
     directory=str(Path(__file__).resolve().parent / "templates"),
-    context_processors=[csrf_context],  # every template gets `csrf_token`
+    context_processors=[csrf_context, layout_context],  # every template gets `csrf_token` and `layout`
 )
 router = APIRouter()
 

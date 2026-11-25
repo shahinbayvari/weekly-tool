@@ -7,10 +7,12 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Engine
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.access import NotAllowed, not_allowed_handler
 from app.auth import get_engine, get_optional_user, router as auth_router
 from app.config import load_settings
+from app.errors import http_exception_handler
 from app.invites import router as invites_router
 from app.models import User
 from app.pages.missing import router as missing_router
@@ -50,6 +52,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Weekly Feedback Tool", lifespan=lifespan)
 install_security(app, settings)
 app.add_exception_handler(NotAllowed, not_allowed_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.include_router(auth_router)
 app.include_router(setup_router)
 app.include_router(invites_router)
