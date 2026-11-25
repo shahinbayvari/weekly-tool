@@ -7,10 +7,13 @@ from dataclasses import dataclass, field
 from datetime import time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from app.email import BACKENDS
+
 DEV_SECRET_KEY = "dev-only-insecure-secret-key"  # development only
 
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 ENVIRONMENTS = ("development", "production")
+EMAIL_BACKENDS = tuple(BACKENDS)  # single source of truth: app.email.BACKENDS
 _TIME_RE = re.compile(r"([01]\d|2[0-3]):([0-5]\d)")
 
 
@@ -28,6 +31,7 @@ class Settings:
     close_day: str = "friday"
     close_time: str = "17:00"
     env: str = "development"
+    email_backend: str = "console"
 
 
 def _day(name: str, value: str) -> str:
@@ -85,6 +89,12 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     if app_env == "production" and secret_key == DEV_SECRET_KEY:
         raise ConfigError("WEEKLY_SECRET_KEY: the default development key is not allowed in production")
 
+    email_backend = get("WEEKLY_EMAIL_BACKEND", defaults.email_backend)
+    if email_backend not in EMAIL_BACKENDS:
+        raise ConfigError(
+            f"WEEKLY_EMAIL_BACKEND: {email_backend!r} must be one of {', '.join(EMAIL_BACKENDS)}"
+        )
+
     return Settings(
         db_path=db_path,
         secret_key=secret_key,
@@ -94,4 +104,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         close_day=close_day,
         close_time=close_time,
         env=app_env,
+        email_backend=email_backend,
     )

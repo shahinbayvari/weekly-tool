@@ -127,3 +127,18 @@ def test_secret_not_in_settings_repr():
     s = load_settings({"WEEKLY_SECRET_KEY": "topsecret"})
     assert "topsecret" not in repr(s)
     assert "topsecret" not in str(s)
+
+
+def test_email_backend_default_is_console():
+    assert load_settings({}).email_backend == "console"
+
+
+def test_email_backend_console_accepted():
+    assert load_settings({"WEEKLY_EMAIL_BACKEND": "console"}).email_backend == "console"
+
+
+@pytest.mark.parametrize("bad", ["smtp", "", "Console", " console"])
+def test_email_backend_rejected(bad):
+    with pytest.raises(ConfigError, match=r"WEEKLY_EMAIL_BACKEND.*must be one of console") as exc:
+        load_settings({"WEEKLY_EMAIL_BACKEND": bad})
+    assert repr(bad) in str(exc.value)
