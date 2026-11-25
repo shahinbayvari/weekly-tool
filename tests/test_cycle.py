@@ -221,3 +221,37 @@ def test_describe_settings_uses_settings_fields():
     moment = ams(2026, 11, 23, 9, 0)
     s = Settings(timezone="Europe/Amsterdam")
     assert describe_settings(moment, s) == describe(moment, DEFAULT)
+
+
+# Gap times other than 02:30 must all resolve exactly to the end of the gap.
+
+GAPS = [
+    (AMS, (2026, 3, 29), utc(2026, 3, 29, 1, 0)),
+    (NY, (2026, 3, 8), utc(2026, 3, 8, 7, 0)),
+]
+
+
+@pytest.mark.parametrize("zone,ymd,end", GAPS)
+@pytest.mark.parametrize("at", [time(2, 0, 0, 1), time(2, 1), time(2, 15), time(2, 59), time(2, 59, 59, 999999)])
+def test_gap_times_resolve_exactly_to_transition(zone, ymd, end, at):
+    from app.cycle import _resolve
+    from datetime import date
+
+    assert _resolve(date(*ymd), at, zone) == end
+
+
+@pytest.mark.parametrize("zone,ymd,end", GAPS)
+@pytest.mark.parametrize("at", [time(2, 1), time(2, 59)])
+def test_gap_open_and_close_flip_exactly_at_transition(zone, ymd, end, at):
+    y, m, d = ymd
+    close = Schedule(zone, 5, time(9, 0), 6, at)  # Sat 09:00 - Sun `at`
+    just_before = end - timedelta(microseconds=1)
+    assert describe(just_before, close).phase == OPEN
+    c = describe(end, close)
+    assert c.phase == CLOSED
+    assert c.week_close.astimezone(UTC) == end
+    opening = Schedule(zone, 6, at, 6, time(23, 0))  # Sun `at` - 23:00
+    assert describe(just_before, opening).phase == CLOSED
+    o = describe(end, opening)
+    assert o.phase == OPEN
+    assert o.week_open.astimezone(UTC) == end

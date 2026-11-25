@@ -74,9 +74,13 @@ def _resolve(day: date, at: time, tz: tzinfo) -> datetime:
     new = naive.replace(tzinfo=tz, fold=1).utcoffset()
     lo = (naive - max(old, new)).replace(tzinfo=UTC)
     hi = (naive - min(old, new)).replace(tzinfo=UTC)
+    # Transitions fall on whole seconds, so bisect on whole seconds.
+    lo = lo.replace(microsecond=0)
+    if hi.microsecond:
+        hi = hi.replace(microsecond=0) + timedelta(seconds=1)
     before = lo.astimezone(tz).utcoffset()
     while hi - lo > timedelta(seconds=1):
-        mid = lo + (hi - lo) // 2
+        mid = lo + timedelta(seconds=((hi - lo) // timedelta(seconds=1)) // 2)
         if mid.astimezone(tz).utcoffset() == before:
             lo = mid
         else:
