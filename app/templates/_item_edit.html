@@ -1,5 +1,5 @@
 <li id="item-{{ item.id }}">
-  <form hx-post="/submit/items/{{ item.id }}/edit" hx-target="#item-{{ item.id }}" hx-swap="outerHTML">
+  <form hx-post="/submit/items/{{ item.id }}/edit" hx-target="#item-{{ item.id }}" hx-swap="outerHTML"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="text" name="text" value="{{ text }}" aria-label="Edit text">
     <button type="submit">Save</button>
     <button type="button" hx-get="/submit/items/{{ item.id }}" hx-target="#item-{{ item.id }}" hx-swap="outerHTML">Cancel</button>

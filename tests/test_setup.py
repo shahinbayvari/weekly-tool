@@ -1,7 +1,7 @@
 import threading
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.conftest import CsrfClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,7 @@ PW = "correct horse"
 
 @pytest.fixture
 def client(db_engine):
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         yield c
 
 
@@ -125,7 +125,7 @@ def test_concurrent_submissions_exactly_one_wins(db_engine):
     results = []
 
     def submit(i):
-        with TestClient(app, follow_redirects=False) as c:
+        with CsrfClient(app, follow_redirects=False) as c:
             body = data(email=f"owner{i}@example.com", project_name=f"Project {i}")
             barrier.wait()
             results.append(c.post("/setup", data=body).status_code)

@@ -2,7 +2,7 @@ import logging
 import threading
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.conftest import CsrfClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -25,7 +25,7 @@ def owner_id(db_engine):
 
 @pytest.fixture
 def client(db_engine, owner_id):
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         yield c
 
 
@@ -111,7 +111,7 @@ def test_bad_password_reshows_form_and_consumes_nothing(client, db_engine, owner
 def test_reuse_after_acceptance_is_not_valid(client, db_engine, owner_id):
     t = add_invite(db_engine, owner_id)
     client.post(f"/invite/{t}", data=form())
-    with TestClient(app, follow_redirects=False) as other:
+    with CsrfClient(app, follow_redirects=False) as other:
         assert_not_valid(other.get(f"/invite/{t}"), t)
         assert_not_valid(other.post(f"/invite/{t}", data=form()), t)
     assert len(users(db_engine)) == 2
@@ -167,7 +167,7 @@ def test_concurrent_submissions_exactly_one_wins(db_engine, owner_id):
     results = []
 
     def submit():
-        with TestClient(app, follow_redirects=False) as c:
+        with CsrfClient(app, follow_redirects=False) as c:
             barrier.wait()
             r = c.post(f"/invite/{t}", data=form())
             results.append((r.status_code, NOT_VALID in r.text))
@@ -196,7 +196,7 @@ def test_token_not_in_app_logs_or_error_pages(client, db_engine, owner_id, caplo
     with caplog.at_level(logging.DEBUG):
         weak = client.post(path, data=form("short"))
         client.post(path, data=form())
-        with TestClient(app, follow_redirects=False) as other:
+        with CsrfClient(app, follow_redirects=False) as other:
             again_get = other.get(path)
             again_post = other.post(path, data=form())
     # (httpx's own client-side request log is excluded: it is the test client, not the app)

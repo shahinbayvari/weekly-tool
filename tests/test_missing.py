@@ -4,7 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.conftest import CsrfClient
 from sqlalchemy import text
 
 from app.config import Settings
@@ -125,13 +125,13 @@ def clock():
 
 
 def client_for(email):
-    c = TestClient(app, follow_redirects=False)
+    c = CsrfClient(app, follow_redirects=False)
     assert c.post("/login", data={"email": email, "password": PW}).status_code == 303
     return c
 
 
 def test_page_signed_out_redirects(db_engine, users, clock):
-    r = TestClient(app, follow_redirects=False).get("/missing")
+    r = CsrfClient(app, follow_redirects=False).get("/missing")
     assert r.status_code == 303 and r.headers["location"].startswith("/login")
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.conftest import CsrfClient
 from sqlalchemy import text
 
 from app.config import Settings
@@ -135,7 +135,7 @@ def clock():
 
 
 def page(email="owner@example.com"):
-    c = TestClient(app, follow_redirects=False)
+    c = CsrfClient(app, follow_redirects=False)
     assert c.post("/login", data={"email": email, "password": PW}).status_code == 303
     r = c.get("/missing")
     assert r.status_code == 200

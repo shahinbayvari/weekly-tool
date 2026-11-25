@@ -7,7 +7,7 @@
 </head>
 <body>
   <p>Signed in as {{ email }}</p>
-  <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+  <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Sign out</button></form>
 
   <h1>Missing submitters</h1>
   {% if not is_open %}

@@ -210,3 +210,19 @@ def test_base_url_accepted_and_trailing_slash_stripped(given, expected):
 def test_base_url_rejected(bad):
     with pytest.raises(ConfigError, match=rf"WEEKLY_BASE_URL.*{re.escape(repr(bad))}"):
         load_settings({"WEEKLY_BASE_URL": bad})
+
+
+def test_cookie_secure_default_and_accepted():
+    assert load_settings({}).cookie_secure is False
+    assert load_settings({"WEEKLY_COOKIE_SECURE": "true"}).cookie_secure is True
+    assert load_settings({"WEEKLY_COOKIE_SECURE": "false"}).cookie_secure is False
+
+
+@pytest.mark.parametrize("bad", ["True", "FALSE", "1", "0", "", "yes", "no", " true", "true "])
+def test_cookie_secure_rejected(bad):
+    with pytest.raises(ConfigError, match=rf"WEEKLY_COOKIE_SECURE.*{re.escape(repr(bad))}.*true, false"):
+        load_settings({"WEEKLY_COOKIE_SECURE": bad})
+
+
+def test_production_does_not_imply_secure_cookie():
+    assert load_settings({"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": "s3cret"}).cookie_secure is False

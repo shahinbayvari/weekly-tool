@@ -2,7 +2,7 @@ import hashlib
 import re
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.conftest import CsrfClient
 from sqlalchemy import text
 
 from app.main import app
@@ -16,7 +16,7 @@ EMAIL = {"owner": "olga@example.com", "member": "mia@example.com"}
 def client(db_engine):
     create_user(EMAIL["owner"], PW, "owner", engine=db_engine)
     create_user(EMAIL["member"], PW, "member", engine=db_engine)
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         yield c
 
 

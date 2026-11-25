@@ -17,11 +17,15 @@ from sqlalchemy.orm import Session
 from app.db import make_engine
 from app.models import User
 from app.passwords import verify_password
+from app.security import csrf_context
 from app.users import find_user_by_email
 
 SESSION_KEY = "user_id"
 
-templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+templates = Jinja2Templates(
+    directory=str(Path(__file__).resolve().parent / "templates"),
+    context_processors=[csrf_context],  # every template gets `csrf_token`
+)
 router = APIRouter()
 
 

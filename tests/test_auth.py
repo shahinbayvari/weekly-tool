@@ -4,7 +4,7 @@ import re
 
 import pytest
 from fastapi import Depends
-from fastapi.testclient import TestClient
+from tests.conftest import CsrfClient
 from sqlalchemy import text
 
 from app.auth import current_user, safe_next
@@ -17,7 +17,7 @@ PW = "correct horse"
 @pytest.fixture
 def client(db_engine):
     # db_engine points WEEKLY_DB_PATH at the isolated, migrated test database
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         yield c
 
 

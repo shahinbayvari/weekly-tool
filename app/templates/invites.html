@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Invites</title>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
   <h1>Invites</h1>
@@ -14,7 +15,7 @@
     <p><code>{{ link }}</code></p>
   </section>
   {% endif %}
-  <form method="post" action="/invites">
+  <form method="post" action="/invites"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Email <input type="text" name="email" value="{{ email }}" required></label>
     <button type="submit">Create invite</button>
   </form>
@@ -25,7 +26,7 @@
     {% for invite in pending %}
     <li>
       {{ invite.email }} (created {{ invite.created_at.strftime("%Y-%m-%d") }})
-      <form method="post" action="/invites/{{ invite.id }}/revoke" style="display:inline"><button type="submit">Revoke</button></form>
+      <form method="post" action="/invites/{{ invite.id }}/revoke" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Revoke</button></form>
     </li>
     {% endfor %}
   </ul>

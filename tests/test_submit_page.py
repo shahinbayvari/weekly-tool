@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.conftest import CsrfClient
 from sqlalchemy import text
 
 from app.config import Settings
@@ -57,7 +57,7 @@ def sign_in(client, email="ann@example.com"):
 
 @pytest.fixture
 def client(db_engine, clock, ann, bob):
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         sign_in(c)
         yield c
 
@@ -81,7 +81,7 @@ def section(html, name):
 
 
 def test_requires_login(db_engine, clock, ann):
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         r = c.get("/submit")
     assert r.status_code == 303 and r.headers["location"] == "/login?next=%2Fsubmit"
 
@@ -110,7 +110,7 @@ def test_owner_sees_own_items_page(db_engine, clock, ann):
     owner = create_user("own@example.com", PW, "owner", engine=db_engine)
     seed(db_engine, owner, "owner item", "continue")
     seed(db_engine, ann, "ann item", "continue")
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         sign_in(c, "own@example.com")
         html = c.get("/submit").text
     assert "owner item" in html and "ann item" not in html
@@ -312,7 +312,7 @@ def test_missing_item_404(client):
 
 def test_writes_require_login(db_engine, clock, ann):
     item = seed(db_engine, ann, "x")
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         assert c.post("/submit/start/items", data={"text": "x"}).status_code == 303
         assert c.post(f"/submit/items/{item.id}/delete").status_code == 303
     assert len(rows(db_engine)) == 1

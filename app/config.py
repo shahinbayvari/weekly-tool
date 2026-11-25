@@ -36,6 +36,7 @@ class Settings:
     base_url: str = "http://127.0.0.1:8000"
     reminder_interval_minutes: int = 5
     scheduler_enabled: bool = True
+    cookie_secure: bool = False
 
 
 def _day(name: str, value: str) -> str:
@@ -114,6 +115,10 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     if enabled_raw not in ("true", "false"):
         raise ConfigError(f"WEEKLY_SCHEDULER_ENABLED: {enabled_raw!r} must be one of true, false")
 
+    secure_raw = get("WEEKLY_COOKIE_SECURE", "true" if defaults.cookie_secure else "false")
+    if secure_raw not in ("true", "false"):
+        raise ConfigError(f"WEEKLY_COOKIE_SECURE: {secure_raw!r} must be one of true, false")
+
     base_url = get("WEEKLY_BASE_URL", defaults.base_url)
     if not re.fullmatch(r"https?://[^\s/?#]+[^\s?#]*", base_url):
         raise ConfigError(
@@ -135,4 +140,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         base_url=base_url,
         reminder_interval_minutes=int(interval_raw),
         scheduler_enabled=enabled_raw == "true",
+        cookie_secure=secure_raw == "true",
     )

@@ -7,7 +7,6 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Engine
-from starlette.middleware.sessions import SessionMiddleware
 
 from app.access import NotAllowed, not_allowed_handler
 from app.auth import get_engine, get_optional_user, router as auth_router
@@ -18,6 +17,7 @@ from app.pages.missing import router as missing_router
 from app.pages.reveal import router as reveal_router
 from app.pages.submit import get_now, get_settings, router as submit_router  # noqa: F401
 from app.scheduler import start_scheduler, stop_scheduler
+from app.security import install as install_security
 from app.setup import no_users, router as setup_router
 
 
@@ -48,13 +48,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Weekly Feedback Tool", lifespan=lifespan)
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=settings.secret_key,
-    session_cookie="weekly_session",
-    same_site="lax",  # HttpOnly is always set by SessionMiddleware
-    https_only=settings.env == "production",
-)
+install_security(app, settings)
 app.add_exception_handler(NotAllowed, not_allowed_handler)
 app.include_router(auth_router)
 app.include_router(setup_router)

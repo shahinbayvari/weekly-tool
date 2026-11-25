@@ -5,7 +5,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.conftest import CsrfClient, strip_csrf
 from sqlalchemy import text
 
 from app.config import Settings
@@ -62,7 +62,7 @@ def sign_in(client, email):
 
 @pytest.fixture
 def client(db_engine, clock, users):
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         sign_in(c, "ann@example.com")
         yield c
 
@@ -80,11 +80,11 @@ def column(html, name):
 def get(client):
     r = client.get("/reveal")
     assert r.status_code == 200
-    return r.text
+    return strip_csrf(r.text)
 
 
 def test_requires_sign_in(db_engine, clock, users):
-    with TestClient(app, follow_redirects=False) as c:
+    with CsrfClient(app, follow_redirects=False) as c:
         r = c.get("/reveal")
     assert r.status_code == 303
     assert r.headers["location"].startswith("/login")
@@ -94,7 +94,7 @@ def test_owner_and_members_see_same_results(db_engine, clock, users):
     seed(db_engine, users["ann"], "shared text")
     pages = []
     for email in ("owner@example.com", "ann@example.com", "bob@example.com"):
-        with TestClient(app, follow_redirects=False) as c:
+        with CsrfClient(app, follow_redirects=False) as c:
             sign_in(c, email)
             pages.append(re.sub(r"Signed in as \S+", "", get(c)))
     assert pages[0] == pages[1] == pages[2]
