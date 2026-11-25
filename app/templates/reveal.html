@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Results</title>
+</head>
+<body>
+  <p>Signed in as {{ email }}</p>
+  <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+
+  {% if hidden_until %}
+  <p class="hidden-until">Results are hidden until {{ hidden_until }}</p>
+  {% endif %}
+
+  {% if week %}
+  <h1>{{ week.heading }}</h1>
+  {% for category, title, items in week.columns %}
+  <section id="column-{{ category }}">
+    <h2>{{ title }}</h2>
+    {% if items %}
+    <ul>
+      {% for item in items %}
+      <li>{{ item.text }} <span class="author">{% if item.email is defined %}{{ item.email }}{% else %}Anonymous{% endif %}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>No items</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+  {% else %}
+  <p>No earlier results</p>
+  {% endif %}
+</body>
+</html>
