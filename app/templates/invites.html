@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Invites</title>
+</head>
+<body>
+  <h1>Invites</h1>
+  {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+  {% if link %}
+  <section id="new-invite">
+    <p>Invite created. Give this link to the team member. It is shown only once:</p>
+    <p><code>{{ link }}</code></p>
+  </section>
+  {% endif %}
+  <form method="post" action="/invites">
+    <label>Email <input type="text" name="email" value="{{ email }}" required></label>
+    <button type="submit">Create invite</button>
+  </form>
+
+  <h2>Pending invites</h2>
+  {% if pending %}
+  <ul>
+    {% for invite in pending %}
+    <li>
+      {{ invite.email }} (created {{ invite.created_at.strftime("%Y-%m-%d") }})
+      <form method="post" action="/invites/{{ invite.id }}/revoke" style="display:inline"><button type="submit">Revoke</button></form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p>None</p>{% endif %}
+
+  <h2>Accepted invites</h2>
+  {% if accepted %}
+  <ul>
+    {% for invite in accepted %}
+    <li>{{ invite.email }} (accepted {{ invite.accepted_at.strftime("%Y-%m-%d") }})</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p>None</p>{% endif %}
+</body>
+</html>

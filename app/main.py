@@ -6,6 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.access import NotAllowed, not_allowed_handler
 from app.auth import get_engine, get_optional_user, router as auth_router, templates
 from app.config import load_settings
+from app.invites import router as invites_router
 from app.models import User
 from app.setup import no_users, router as setup_router
 
@@ -22,6 +23,7 @@ app.add_middleware(
 app.add_exception_handler(NotAllowed, not_allowed_handler)
 app.include_router(auth_router)
 app.include_router(setup_router)
+app.include_router(invites_router)
 
 
 @app.get("/health")
