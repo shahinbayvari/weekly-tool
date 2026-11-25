@@ -141,11 +141,14 @@ def test_page_member_forbidden(db_engine, users, clock):
 
 def test_page_lists_missing_with_deadline(db_engine, users, clock):
     add(db_engine, users["ann"])
+    add(db_engine, users["owner"])
+    add(db_engine, create_user("cy@example.com", PW, "member", engine=db_engine))
     r = client_for("owner@example.com").get("/missing")
     assert r.status_code == 200
     html = r.text
     assert "bob@example.com" in html
     assert "ann@example.com" not in html
+    assert "cy@example.com" not in html
     assert "Friday 2026-11-27 17:00 CET (Europe/Amsterdam)" in html
     assert "Everyone has submitted" not in html
 
@@ -162,7 +165,7 @@ def test_page_closed_shows_no_list_and_no_query(db_engine, users, clock, monkeyp
     def boom(*a, **k):
         raise AssertionError("query must not run")
 
-    monkeypatch.setattr("app.pages.missing.missing_submitters", boom)
+    monkeypatch.setattr("app.pages.missing.visible_missing", boom)
     clock.now = CLOSED
     html = client_for("owner@example.com").get("/missing").text
     assert "The window is closed" in html

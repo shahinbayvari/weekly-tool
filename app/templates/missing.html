@@ -14,7 +14,9 @@
   <p>The window is closed</p>
   {% else %}
   <p class="deadline">Deadline: {{ deadline }}</p>
-  {% if people %}
+  {% if count %}
+  <p>{{ count }} {{ "person has" if count == 1 else "people have" }} not submitted</p>
+  {% elif people %}
   <ul>
     {% for person in people %}
     <li>{{ person }}</li>
