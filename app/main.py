@@ -1,5 +1,6 @@
 import logging
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -16,6 +17,7 @@ from app.models import User
 from app.pages.missing import router as missing_router
 from app.pages.reveal import router as reveal_router
 from app.pages.submit import get_now, get_settings, router as submit_router  # noqa: F401
+from app.scheduler import start_scheduler, stop_scheduler
 from app.setup import no_users, router as setup_router
 
 
@@ -35,7 +37,17 @@ logging.getLogger("uvicorn.access").addFilter(RedactInviteToken())
 
 settings = load_settings()  # fail at import on invalid configuration
 
-app = FastAPI(title="Weekly Feedback Tool")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    started = start_scheduler(settings)  # no-op when WEEKLY_SCHEDULER_ENABLED=false
+    try:
+        yield
+    finally:
+        if started:
+            stop_scheduler()
+
+
+app = FastAPI(title="Weekly Feedback Tool", lifespan=lifespan)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.secret_key,

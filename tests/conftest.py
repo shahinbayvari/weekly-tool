@@ -1,3 +1,4 @@
+import os
 import shutil
 import tempfile
 from contextlib import contextmanager
@@ -31,3 +32,8 @@ def db_engine(monkeypatch):
     """Per-test isolated, migrated database engine (foreign keys on)."""
     with isolated_db(monkeypatch) as engine:
         yield engine
+
+
+# The reminder scheduler must never start during tests. Set before any test
+# module imports app.main (which reads the settings at import time).
+os.environ["WEEKLY_SCHEDULER_ENABLED"] = "false"

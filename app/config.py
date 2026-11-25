@@ -34,6 +34,8 @@ class Settings:
     email_backend: str = "console"
     reminder_hours_before: int = 24
     base_url: str = "http://127.0.0.1:8000"
+    reminder_interval_minutes: int = 5
+    scheduler_enabled: bool = True
 
 
 def _day(name: str, value: str) -> str:
@@ -102,6 +104,16 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     if not re.fullmatch(r"[0-9]+", hours_raw) or int(hours_raw) < 1:
         raise ConfigError(f"WEEKLY_REMINDER_HOURS_BEFORE: {hours_raw!r} is not a positive whole number")
 
+    interval_raw = get("WEEKLY_REMINDER_INTERVAL_MINUTES", str(defaults.reminder_interval_minutes))
+    if not re.fullmatch(r"[0-9]+", interval_raw) or int(interval_raw) < 1:
+        raise ConfigError(
+            f"WEEKLY_REMINDER_INTERVAL_MINUTES: {interval_raw!r} is not a positive whole number"
+        )
+
+    enabled_raw = get("WEEKLY_SCHEDULER_ENABLED", "true" if defaults.scheduler_enabled else "false")
+    if enabled_raw not in ("true", "false"):
+        raise ConfigError(f"WEEKLY_SCHEDULER_ENABLED: {enabled_raw!r} must be one of true, false")
+
     base_url = get("WEEKLY_BASE_URL", defaults.base_url)
     if not re.fullmatch(r"https?://[^\s/?#]+[^\s?#]*", base_url):
         raise ConfigError(
@@ -121,4 +133,6 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         email_backend=email_backend,
         reminder_hours_before=int(hours_raw),
         base_url=base_url,
+        reminder_interval_minutes=int(interval_raw),
+        scheduler_enabled=enabled_raw == "true",
     )

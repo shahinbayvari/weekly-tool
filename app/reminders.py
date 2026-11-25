@@ -16,22 +16,28 @@ Design choices
   (#20) must not overlap runs. We re-check the table right before each send to
   shrink that window, and a unique-constraint violation when recording is handled
   (the other run already recorded it) instead of crashing; that email is not counted.
+- Command line: `python -m app.reminders` runs one pass (real clock, configured email
+  backend), prints the emails (console backend) and then, as the LAST stdout line,
+  `Reminders sent: N`, exit 0. On any failure it prints `Error: ...` to stderr and
+  exits 1. It starts no scheduler and no web server.
 - Uses the FULL `missing_submitters` list (owner included), never `visible_missing`.
 """
 
 import logging
+import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.config import Settings
+from app.config import Settings, load_settings
 from app.cycle import Schedule, describe, format_moment
 from app.db import make_engine
-from app.email import EmailSender
+from app.email import EmailSender, get_email_sender
 from app.missing import missing_submitters
-from app.models import ReminderSent
+from app.models import Base, ReminderSent
 
 log = logging.getLogger(__name__)
 
@@ -99,3 +105,36 @@ def send_reminders(now: datetime, sender: EmailSender, settings: Settings, *, en
         if own_engine:
             engine.dispose()
     return sent
+
+
+def _check_database(settings: Settings) -> None:
+    """Fail clearly if the database file or its tables are missing (never creates the file)."""
+    if not Path(settings.db_path).is_file():
+        raise RuntimeError(f"database file {settings.db_path!r} not found; run the migrations first")
+    engine = make_engine(settings.db_path)
+    try:
+        existing = set(inspect(engine).get_table_names())
+    finally:
+        engine.dispose()
+    missing = sorted(set(Base.metadata.tables) - existing)
+    if missing:
+        raise RuntimeError(f"database {settings.db_path!r} is missing tables: {', '.join(missing)}; run the migrations")
+
+
+def main() -> int:
+    """Run the reminder job once. Returns the process exit code."""
+    try:
+        settings = load_settings()
+        _check_database(settings)
+        count = send_reminders(datetime.now(UTC), get_email_sender(settings), settings)
+        sys.stdout.flush()
+        print(f"Reminders sent: {count}")
+        sys.stdout.flush()
+    except Exception as exc:
+        print(f"Error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

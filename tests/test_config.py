@@ -165,6 +165,34 @@ def test_reminder_hours_rejected(bad):
         load_settings({"WEEKLY_REMINDER_HOURS_BEFORE": bad})
 
 
+def test_scheduler_defaults():
+    s = load_settings({})
+    assert s.reminder_interval_minutes == 5
+    assert s.scheduler_enabled is True
+
+
+def test_reminder_interval_accepted():
+    assert load_settings({"WEEKLY_REMINDER_INTERVAL_MINUTES": "1"}).reminder_interval_minutes == 1
+    assert load_settings({"WEEKLY_REMINDER_INTERVAL_MINUTES": "30"}).reminder_interval_minutes == 30
+
+
+@pytest.mark.parametrize("bad", ["0", "-1", "1.5", "", "abc", " 5 ", "+5", "٣"])
+def test_reminder_interval_rejected(bad):
+    with pytest.raises(ConfigError, match=rf"WEEKLY_REMINDER_INTERVAL_MINUTES.*{re.escape(repr(bad))}"):
+        load_settings({"WEEKLY_REMINDER_INTERVAL_MINUTES": bad})
+
+
+def test_scheduler_enabled_accepted():
+    assert load_settings({"WEEKLY_SCHEDULER_ENABLED": "true"}).scheduler_enabled is True
+    assert load_settings({"WEEKLY_SCHEDULER_ENABLED": "false"}).scheduler_enabled is False
+
+
+@pytest.mark.parametrize("bad", ["True", "FALSE", "1", "0", "", "yes", "no", " true", "true "])
+def test_scheduler_enabled_rejected(bad):
+    with pytest.raises(ConfigError, match=rf"WEEKLY_SCHEDULER_ENABLED.*{re.escape(repr(bad))}.*true, false"):
+        load_settings({"WEEKLY_SCHEDULER_ENABLED": bad})
+
+
 @pytest.mark.parametrize(
     "given, expected",
     [

@@ -13,6 +13,7 @@ dependencies = [
     "jinja2",
     "itsdangerous",
     "python-multipart",
+    "apscheduler>=3.11,<4",
 ]
 
 [dependency-groups]
