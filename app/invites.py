@@ -10,13 +10,14 @@ import secrets
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.access import require_owner
-from app.auth import get_engine, templates
+from app.auth import SESSION_KEY, get_engine, get_optional_user, templates
 from app.models import Invite, User
+from app.passwords import WeakPasswordError, hash_password
 from app.users import InvalidEmailError, normalise_email, validate_email
 
 router = APIRouter()
@@ -97,3 +98,105 @@ def revoke_invite(
         invite.revoked_at = func.current_timestamp()
         session.commit()
     return RedirectResponse("/invites", status_code=303)
+
+
+# --- accepting an invite (#9) ------------------------------------------------
+# The token is never logged or echoed: the only place it appears is the form's
+# action URL (the path the visitor already used). Invalid links all give the same page.
+
+
+def _not_valid(request: Request):
+    return templates.TemplateResponse(request, "invite_not_valid.html", {}, status_code=404)
+
+
+def _open_invite_email(engine: Engine, token: str) -> str | None:
+    """Email of the unused, unrevoked invite for this token, if no user has that email yet."""
+    with Session(engine) as session:
+        invite = session.scalar(
+            select(Invite).where(
+                Invite.token_hash == hash_token(token),
+                Invite.accepted_at.is_(None),
+                Invite.revoked_at.is_(None),
+            )
+        )
+        if invite is None or session.scalar(select(User.id).where(User.email == invite.email)):
+            return None
+        return invite.email
+
+
+def _accept_form(request: Request, token: str, email: str, error: str | None = None):
+    context = {"token": token, "email": email, "error": error}
+    return templates.TemplateResponse(request, "accept_invite.html", context, status_code=400 if error else 200)
+
+
+@router.get("/invite/{token}")
+def accept_invite_form(
+    request: Request,
+    token: str,
+    user: User | None = Depends(get_optional_user),
+    engine: Engine = Depends(get_engine),
+):
+    if user is not None:
+        return RedirectResponse("/", status_code=303)
+    email = _open_invite_email(engine, token)
+    if email is None:
+        return _not_valid(request)
+    return _accept_form(request, token, email)
+
+
+@router.post("/invite/{token}")
+def accept_invite(
+    request: Request,
+    token: str,
+    password: str = Form(""),
+    confirm_password: str = Form(""),
+    user: User | None = Depends(get_optional_user),
+    engine: Engine = Depends(get_engine),
+):
+    if user is not None:
+        return RedirectResponse("/", status_code=303)
+    email = _open_invite_email(engine, token)
+    if email is None:
+        return _not_valid(request)
+    error = None
+    password_hash = None
+    try:
+        password_hash = hash_password(password)
+    except WeakPasswordError as exc:
+        error = str(exc)
+    if error is None and password != confirm_password:
+        error = "Passwords do not match"
+    if error:
+        return _accept_form(request, token, email, error)
+
+    # One write transaction: BEGIN IMMEDIATE takes the SQLite write lock before the
+    # re-check, so of several concurrent submissions only one still sees the invite open.
+    token_hash = hash_token(token)
+    with engine.connect() as conn:
+        conn.exec_driver_sql("BEGIN IMMEDIATE")
+        try:
+            invite_email = conn.scalar(
+                select(Invite.email).where(
+                    Invite.token_hash == token_hash, Invite.accepted_at.is_(None), Invite.revoked_at.is_(None)
+                )
+            )
+            if invite_email is None or conn.scalar(select(User.id).where(User.email == invite_email)):
+                conn.rollback()
+                return _not_valid(request)
+            user_id = conn.execute(
+                insert(User).values(email=invite_email, password_hash=password_hash, role="member")
+            ).inserted_primary_key[0]
+            conn.execute(
+                update(Invite).where(Invite.token_hash == token_hash).values(accepted_at=func.current_timestamp())
+            )
+            conn.commit()
+        except IntegrityError:
+            conn.rollback()
+            return _not_valid(request)
+        except BaseException:
+            conn.rollback()
+            raise
+
+    request.session.clear()
+    request.session[SESSION_KEY] = user_id
+    return RedirectResponse("/", status_code=303)

@@ -1,3 +1,6 @@
+import logging
+import re
+
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import Engine
@@ -9,6 +12,21 @@ from app.config import load_settings
 from app.invites import router as invites_router
 from app.models import User
 from app.setup import no_users, router as setup_router
+
+
+
+class RedactInviteToken(logging.Filter):
+    """Keep invite tokens out of server access logs (uvicorn logs the request path)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                re.sub(r"/invite/[^\s?#]+", "/invite/[redacted]", a) if isinstance(a, str) else a for a in record.args
+            )
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(RedactInviteToken())
 
 settings = load_settings()  # fail at import on invalid configuration
 
