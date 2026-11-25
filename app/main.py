@@ -13,6 +13,7 @@ from app.auth import get_engine, get_optional_user, router as auth_router
 from app.config import load_settings
 from app.invites import router as invites_router
 from app.models import User
+from app.pages.missing import router as missing_router
 from app.pages.reveal import router as reveal_router
 from app.pages.submit import get_now, get_settings, router as submit_router  # noqa: F401
 from app.setup import no_users, router as setup_router
@@ -48,6 +49,7 @@ app.include_router(setup_router)
 app.include_router(invites_router)
 app.include_router(submit_router)
 app.include_router(reveal_router)
+app.include_router(missing_router)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 
 

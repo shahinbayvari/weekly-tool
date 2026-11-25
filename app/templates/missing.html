@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Missing submitters</title>
+</head>
+<body>
+  <p>Signed in as {{ email }}</p>
+  <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+
+  <h1>Missing submitters</h1>
+  {% if not is_open %}
+  <p>The window is closed</p>
+  {% else %}
+  <p class="deadline">Deadline: {{ deadline }}</p>
+  {% if people %}
+  <ul>
+    {% for person in people %}
+    <li>{{ person }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Everyone has submitted</p>
+  {% endif %}
+  {% endif %}
+</body>
+</html>
