@@ -40,14 +40,14 @@ def test_login_form(client):
 def test_login_success_redirects_and_signs_in(client, ann):
     r = login(client)
     assert r.status_code == 303 and r.headers["location"] == "/"
-    home = client.get("/")
+    home = client.get("/submit")
     assert home.status_code == 200 and "ann@example.com" in home.text
 
 
 def test_email_trimmed_and_lowercased(client, ann):
     r = login(client, email="  Ann@Example.com")
     assert r.status_code == 303
-    assert "ann@example.com" in client.get("/").text
+    assert "ann@example.com" in client.get("/submit").text
 
 
 def test_wrong_password_and_unknown_email_identical(client, ann):
@@ -153,7 +153,7 @@ def test_tampered_cookie_signs_out(client, ann):
 def test_cookie_for_deleted_user_signs_out(client, ann, db_engine):
     create_user("bob@example.com", PW, "member", engine=db_engine)  # keeps setup closed
     login(client)
-    assert client.get("/").status_code == 200
+    assert client.get("/submit").status_code == 200
     with db_engine.begin() as c:
         c.execute(text("DELETE FROM users WHERE id = :i"), {"i": ann.id})
     r = client.get("/")
@@ -185,9 +185,15 @@ def test_logout_clears_session(client, ann):
 def test_logout_get_not_allowed(client, ann):
     login(client)
     assert client.get("/logout").status_code == 405
-    assert client.get("/").status_code == 200  # still signed in
+    assert client.get("/submit").status_code == 200  # still signed in
 
 
 def test_landing_redirects_to_login_when_signed_out(client, ann):  # a user exists, so not /setup
     r = client.get("/")
     assert r.status_code == 303 and r.headers["location"] == "/login?next=%2F"
+
+
+def test_landing_redirects_signed_in_user_to_submit(client, ann):
+    login(client)
+    r = client.get("/")
+    assert r.status_code == 303 and r.headers["location"] == "/submit"

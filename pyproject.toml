@@ -25,4 +25,4 @@ dev = [
 testpaths = ["tests"]
 
 [tool.setuptools]
-packages = ["app"]
+packages = ["app", "app.pages"]

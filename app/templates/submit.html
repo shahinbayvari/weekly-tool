@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Submit feedback</title>
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+  <p>Signed in as {{ email }}</p>
+  <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+
+  <div id="notice" role="alert"></div>
+
+  {% if is_open %}
+  <p class="deadline">The window is open. Deadline: {{ deadline }} ({{ tz }})</p>
+  {% else %}
+  <p class="deadline">The window is closed. The next one opens {{ next_open }} ({{ tz }}). The last deadline was {{ deadline }} ({{ tz }}).</p>
+  {% endif %}
+
+  {% for category, title, items in sections %}
+  <section id="section-{{ category }}">
+    <h2>{{ title }}</h2>
+    {% if is_open %}
+    {% with form = {"category": category, "text": "", "anonymous": False, "error": ""} %}{% include "_add_form.html" %}{% endwith %}
+    {% endif %}
+    {% with editable = is_open %}{% include "_list.html" %}{% endwith %}
+  </section>
+  {% endfor %}
+</body>
+</html>

@@ -44,7 +44,7 @@ def test_success_creates_owner_and_project_and_signs_in(client, db_engine):
         projects = s.scalars(select(Project)).all()
     assert [(u.email, u.role) for u in users] == [("owner@example.com", "owner")]
     assert [(p.id, p.name) for p in projects] == [(1, "Team A")]
-    home = client.get("/")
+    home = client.get("/submit")
     assert home.status_code == 200 and "owner@example.com" in home.text
 
 
@@ -114,7 +114,7 @@ def test_owner_is_a_regular_user_who_can_sign_out_and_in(client):
     client.post("/setup", data=data())
     assert client.post("/logout").status_code == 303
     r = client.post("/login", data={"email": "owner@example.com", "password": PW})
-    assert r.status_code == 303 and client.get("/").status_code == 200
+    assert r.status_code == 303 and client.get("/submit").status_code == 200
 
 
 def test_concurrent_submissions_exactly_one_wins(db_engine):

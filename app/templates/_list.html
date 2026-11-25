@@ -1,0 +1,5 @@
+<ul id="list-{{ category }}"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for item in items %}{% include "_item.html" %}
+  {% else %}<li class="empty">Nothing yet</li>
+  {% endfor %}
+</ul>

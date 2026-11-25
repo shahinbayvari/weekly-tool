@@ -1,16 +1,19 @@
 import logging
 import re
+from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Engine
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.access import NotAllowed, not_allowed_handler
-from app.auth import get_engine, get_optional_user, router as auth_router, templates
+from app.auth import get_engine, get_optional_user, router as auth_router
 from app.config import load_settings
 from app.invites import router as invites_router
 from app.models import User
+from app.pages.submit import get_now, get_settings, router as submit_router  # noqa: F401
 from app.setup import no_users, router as setup_router
 
 
@@ -42,6 +45,8 @@ app.add_exception_handler(NotAllowed, not_allowed_handler)
 app.include_router(auth_router)
 app.include_router(setup_router)
 app.include_router(invites_router)
+app.include_router(submit_router)
+app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 
 
 @app.get("/health")
@@ -51,10 +56,9 @@ def health() -> dict[str, str]:
 
 @app.get("/")
 def index(
-    request: Request,
     user: User | None = Depends(get_optional_user),
     engine: Engine = Depends(get_engine),
 ):
     if user is None:
         return RedirectResponse("/setup" if no_users(engine) else "/login?next=%2F", status_code=303)
-    return templates.TemplateResponse(request, "index.html", {"email": user.email})
+    return RedirectResponse("/submit", status_code=303)

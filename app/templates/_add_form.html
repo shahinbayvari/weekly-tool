@@ -1,0 +1,6 @@
+<form id="add-{{ form.category }}" hx-post="/submit/{{ form.category }}/items" hx-target="#add-{{ form.category }}" hx-swap="outerHTML">
+  <input type="text" name="text" value="{{ form.text }}" aria-label="New {{ titles[form.category] }} item">
+  <label><input type="checkbox" name="anonymous"{% if form.anonymous %} checked{% endif %}> Anonymous</label>
+  <button type="submit">Add</button>
+  {% if form.error %}<span class="error" role="alert">{{ form.error }}</span>{% endif %}
+</form>

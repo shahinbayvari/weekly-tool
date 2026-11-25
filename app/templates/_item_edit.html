@@ -1,0 +1,8 @@
+<li id="item-{{ item.id }}">
+  <form hx-post="/submit/items/{{ item.id }}/edit" hx-target="#item-{{ item.id }}" hx-swap="outerHTML">
+    <input type="text" name="text" value="{{ text }}" aria-label="Edit text">
+    <button type="submit">Save</button>
+    <button type="button" hx-get="/submit/items/{{ item.id }}" hx-target="#item-{{ item.id }}" hx-swap="outerHTML">Cancel</button>
+    {% if error %}<span class="error" role="alert">{{ error }}</span>{% endif %}
+  </form>
+</li>

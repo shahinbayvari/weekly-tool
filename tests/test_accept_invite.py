@@ -85,7 +85,7 @@ def test_post_valid_creates_member_accepts_signs_in_redirects(client, db_engine,
     assert r.status_code == 303 and r.headers["location"] == "/"
     assert users(db_engine) == [("olga@example.com", "owner"), (INVITEE, "member")]
     assert accepted_at(db_engine, t) is not None
-    home = client.get("/")
+    home = client.get("/submit")
     assert home.status_code == 200 and INVITEE in home.text
 
 
@@ -156,7 +156,7 @@ def test_signed_in_visitor_redirected_and_invite_unused(client, db_engine, owner
     assert r.status_code == 303 and r.headers["location"] == "/"
     assert users(db_engine) == [("olga@example.com", "owner")]
     assert accepted_at(db_engine, t) is None
-    assert "olga@example.com" in client.get("/").text  # still signed in as the owner
+    assert "olga@example.com" in client.get("/submit").text  # still signed in as the owner
 
 
 def test_concurrent_submissions_exactly_one_wins(db_engine, owner_id):
