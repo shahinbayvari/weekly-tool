@@ -1,3 +1,4 @@
+import re
 import dataclasses
 import importlib
 
@@ -142,3 +143,42 @@ def test_email_backend_rejected(bad):
     with pytest.raises(ConfigError, match=r"WEEKLY_EMAIL_BACKEND.*must be one of console") as exc:
         load_settings({"WEEKLY_EMAIL_BACKEND": bad})
     assert repr(bad) in str(exc.value)
+
+
+# --- reminder settings (#19) -------------------------------------------------
+
+
+def test_reminder_defaults():
+    s = load_settings({})
+    assert s.reminder_hours_before == 24
+    assert s.base_url == "http://127.0.0.1:8000"
+
+
+def test_reminder_hours_accepted():
+    assert load_settings({"WEEKLY_REMINDER_HOURS_BEFORE": "48"}).reminder_hours_before == 48
+    assert load_settings({"WEEKLY_REMINDER_HOURS_BEFORE": "1"}).reminder_hours_before == 1
+
+
+@pytest.mark.parametrize("bad", ["0", "-1", "1.5", "", "abc", " 24 ", "+5", "٣"])
+def test_reminder_hours_rejected(bad):
+    with pytest.raises(ConfigError, match=rf"WEEKLY_REMINDER_HOURS_BEFORE.*{re.escape(repr(bad))}"):
+        load_settings({"WEEKLY_REMINDER_HOURS_BEFORE": bad})
+
+
+@pytest.mark.parametrize(
+    "given, expected",
+    [
+        ("https://weekly.example.com", "https://weekly.example.com"),
+        ("https://weekly.example.com/", "https://weekly.example.com"),
+        ("http://localhost:9000//", "http://localhost:9000"),
+        ("https://example.com/app/", "https://example.com/app"),
+    ],
+)
+def test_base_url_accepted_and_trailing_slash_stripped(given, expected):
+    assert load_settings({"WEEKLY_BASE_URL": given}).base_url == expected
+
+
+@pytest.mark.parametrize("bad", ["", "example.com", "ftp://example.com", "http://", "https:///x", "http://a b"])
+def test_base_url_rejected(bad):
+    with pytest.raises(ConfigError, match=rf"WEEKLY_BASE_URL.*{re.escape(repr(bad))}"):
+        load_settings({"WEEKLY_BASE_URL": bad})

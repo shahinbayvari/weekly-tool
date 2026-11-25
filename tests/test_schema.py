@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db import make_engine, migrate
 from app.models import Base
 
-TABLES = {"users", "project", "invites", "feedback_items"}
+TABLES = {"users", "project", "invites", "feedback_items", "reminders_sent"}
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -45,7 +45,7 @@ def _item(conn, author, category="start"):
 # --- tables and migrations ---------------------------------------------------
 
 
-def test_migrations_create_all_four_tables(db_engine):
+def test_migrations_create_all_tables(db_engine):
     assert TABLES <= set(inspect(db_engine).get_table_names())
 
 

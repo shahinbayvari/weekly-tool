@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, MetaData, String, Text, func, text as sql_text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, MetaData, String, Text, UniqueConstraint, func, text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 NAMING_CONVENTION = {
@@ -68,3 +68,15 @@ class FeedbackItem(Base):
     anonymous: Mapped[bool] = mapped_column(server_default=sql_text("0"))
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
+
+
+class ReminderSent(Base):
+    """One row per reminder email sent: a member gets at most one per week (#19)."""
+
+    __tablename__ = "reminders_sent"
+    __table_args__ = (UniqueConstraint("user_id", "week", name="uq_reminders_sent_user_id_week"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    week: Mapped[str] = mapped_column(String)
+    sent_at: Mapped[datetime] = _now()

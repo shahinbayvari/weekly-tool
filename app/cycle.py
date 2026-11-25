@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from app.config import WEEKDAYS, Settings
 
 OPEN = "open"
+TIME_FORMAT = "%A %Y-%m-%d %H:%M %Z"
 CLOSED = "closed"
 
 
@@ -132,3 +133,8 @@ def describe(now: datetime, schedule: Schedule) -> Cycle:
 def describe_settings(now: datetime, settings: Settings) -> Cycle:
     """`describe` using the application settings."""
     return describe(now, Schedule.from_settings(settings))
+
+
+def format_moment(moment: datetime, settings: Settings) -> str:
+    """A moment as shown to people, e.g. 'Friday 2026-11-27 17:00 CET (Europe/Amsterdam)'."""
+    return f"{moment.astimezone(ZoneInfo(settings.timezone)).strftime(TIME_FORMAT)} ({settings.timezone})"

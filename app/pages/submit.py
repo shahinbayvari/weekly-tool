@@ -16,7 +16,7 @@ from sqlalchemy import Engine
 from app.access import require_login
 from app.auth import get_engine, templates
 from app.config import Settings, load_settings
-from app.cycle import Schedule, describe
+from app.cycle import TIME_FORMAT, Schedule, describe
 from app.items import (
     CATEGORIES,
     InvalidTextError,
@@ -35,7 +35,6 @@ router = APIRouter()
 
 TITLES = {"start": "Start", "stop": "Stop", "continue": "Continue"}
 CLOSED_MESSAGE = "The window is closed"
-TIME_FORMAT = "%A %Y-%m-%d %H:%M %Z"
 
 
 def get_now() -> datetime:
