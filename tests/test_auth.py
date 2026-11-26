@@ -141,13 +141,79 @@ def test_cookie_flags_and_contents(client, ann):
     assert b"ann@example.com" not in payload and b"argon2" not in payload
 
 
+def _decode_sig(segment):
+    # same rules as itsdangerous.encoding.base64_decode: urlsafe alphabet, "=" padding
+    # added, unused padding bits ignored
+    return base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+
+
+def _replacement(ch):
+    return "A" if ch != "A" else "B"
+
+
+def _classify_tampering(value):
+    """Split every position of the cookie into (tested, skipped).
+
+    A position is skipped only when replacing its character leaves the decoded
+    signature bytes unchanged. Only characters of the signature segment (after the
+    last ".") can ever decode to the same bytes, payload and timestamp never do.
+    """
+    sig_start = value.rindex(".") + 1
+    sig = value[sig_start:]
+    tested, skipped = [], []
+    for i in range(len(value)):
+        bad = value[:i] + _replacement(value[i]) + value[i + 1 :]
+        if i >= sig_start and _decode_sig(bad[sig_start:]) == _decode_sig(sig):
+            skipped.append(i)
+        else:
+            tested.append(i)
+    return tested, skipped
+
+
 def test_tampered_cookie_signs_out(client, ann):
     login(client)
     value = client.cookies.get("weekly_session")
-    for i in range(len(value)):
-        bad = value[:i] + ("A" if value[i] != "A" else "B") + value[i + 1 :]
+    # GET / always answers 303 (to /submit or /login), so it cannot tell signed in from
+    # signed out; /submit answers 200 only for a valid session.
+    assert client.get("/submit").status_code == 200
+    tested, skipped = _classify_tampering(value)
+    sig_start = value.rindex(".") + 1
+    # 27 chars carry 162 bits for 160 bits of HMAC: only the final char has unused bits
+    assert skipped in ([], [len(value) - 1]) and len(skipped) <= 3
+    assert all(i >= sig_start for i in skipped)  # payload and timestamp never skipped
+    assert len(tested) + len(skipped) == len(value)
+    assert set(range(sig_start)) <= set(tested)
+    for i in tested:
+        bad = value[:i] + _replacement(value[i]) + value[i + 1 :]
         client.cookies.set("weekly_session", bad)
-        assert client.get("/").status_code == 303, f"char {i}"
+        assert client.get("/submit").status_code == 303, f"char {i}"
+    for i in skipped:
+        # Documents why the position is skipped: the replacement only changes the
+        # unused padding bits, the decoded signature is identical, so the cookie is
+        # still the same valid signature (not a tampering hole).
+        bad = value[:i] + _replacement(value[i]) + value[i + 1 :]
+        client.cookies.set("weekly_session", bad)
+        assert client.get("/submit").status_code == 200, f"skipped char {i}"
+
+
+def test_tampered_cookie_padding_bit_equivalents(client, ann):
+    login(client)
+    value = client.cookies.get("weekly_session")
+    last = len(value) - 1
+    assert client.get("/submit").status_code == 200
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    group = alphabet.index(value[last]) // 4 * 4  # the 4 chars with the same top 4 bits
+    equivalents = set(alphabet[group : group + 4])
+    assert value[last] in equivalents and len(equivalents) == 4
+    for ch in alphabet:
+        client.cookies.set("weekly_session", value[:last] + ch)
+        expected = 200 if ch in equivalents else 303
+        assert client.get("/submit").status_code == expected, f"last char {ch}"
+    # the classifier skips the final position exactly when the real last char is A-D
+    # (replacement A, or B for A, is then an equivalent), checked without a secret
+    for ch in alphabet:
+        fake = "e30=.MTIz.AAAAAAAAAAAAAAAAAAAAAAAAAA" + ch
+        assert _classify_tampering(fake)[1] == ([len(fake) - 1] if ch in "ABCD" else []), ch
 
 
 def test_cookie_for_deleted_user_signs_out(client, ann, db_engine):
