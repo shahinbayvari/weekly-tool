@@ -1,5 +1,7 @@
 """Password hashing, verification and length rules (argon2-cffi, default parameters)."""
 
+import secrets
+
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
@@ -7,6 +9,10 @@ MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
 
 _hasher = PasswordHasher()
+
+# Hash of a random secret that is thrown away: no password can match it. Made once, with the
+# same hasher as real hashes, so verifying against it costs the same as a real verification.
+DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(32))
 
 
 class WeakPasswordError(ValueError):
@@ -33,3 +39,8 @@ def verify_password(password: str, password_hash: str) -> bool:
         return _hasher.verify(password_hash, password)
     except (VerificationError, InvalidHashError, ValueError, TypeError):
         return False
+
+
+def verify_unknown_user(password: str) -> bool:
+    """Do one full verification against the dummy hash (for unknown emails). Always False."""
+    return verify_password(password, DUMMY_HASH)

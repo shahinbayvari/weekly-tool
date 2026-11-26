@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.db import make_engine
 from app.models import Project, User
-from app.passwords import verify_password
+from app.passwords import verify_password, verify_unknown_user
 from app.security import csrf_context
 from app.users import find_user_by_email
 
@@ -143,9 +143,16 @@ def login(
     engine: Engine = Depends(get_engine),
 ):
     next_url = safe_next(next)
+    # Empty fields are rejected before any hashing. Otherwise exactly one verification runs
+    # (against a dummy hash for an unknown email), so all failures do the same work and
+    # give the same response.
+    if not email.strip() or not password:
+        return _form(request, email, next_url, status_code=401)
     user = find_user_by_email(email, engine=engine)
-    # empty fields, unknown email and wrong password all give the same response
-    if not email.strip() or not password or user is None or not verify_password(password, user.password_hash):
+    if user is None:
+        verify_unknown_user(password)
+        return _form(request, email, next_url, status_code=401)
+    if not verify_password(password, user.password_hash):
         return _form(request, email, next_url, status_code=401)
     request.session.clear()
     request.session[SESSION_KEY] = user.id
