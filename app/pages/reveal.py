@@ -62,7 +62,7 @@ def reveal_page(
 ):
     schedule = Schedule.from_settings(settings)
     cycle = describe(now, schedule)
-    context = {"email": user.email, "hidden_until": None, "week": None}
+    context = {"hidden_until": None, "week": None}
     if cycle.is_open:
         context["hidden_until"] = f"{cycle.week_close.strftime(TIME_FORMAT)} ({settings.timezone})"
         previous = (date.fromisoformat(cycle.week_id) - timedelta(days=7)).isoformat()

@@ -81,8 +81,34 @@ def test_first_run_creates_everything_and_prints(seeded, capsys):
         assert all(users[e].role == "member" for e in SEED_EMAILS if e != OWNER_EMAIL)
         assert all(u.password_hash.startswith("$argon2") for u in users.values())
         assert all(DEMO_PASSWORD not in u.password_hash for u in users.values())
+        assert {e: u.display_name for e, u in users.items()} == DEMO_NAMES
     engine.dispose()
     assert len(DEMO_PASSWORD) >= 8
+
+
+DEMO_NAMES = {
+    "owner@example.com": "Olivia Owner",
+    "member1@example.com": "Alex",
+    "member2@example.com": "Bailey",
+    "member3@example.com": "Casey",
+    "member4@example.com": "Dana",
+    "member5@example.com": "Eli",
+}
+
+
+def test_existing_demo_users_keep_their_names_on_rerun(env):
+    assert main(["--week", WEEK]) == 0
+    engine = make_engine(str(env))
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE users SET display_name = 'Custom' WHERE email = 'member1@example.com'"))
+    engine.dispose()
+    assert main(["--week", OTHER_WEEK]) == 0
+    engine = make_engine(str(env))
+    with Session(engine) as s:
+        names = dict(s.execute(select(User.email, User.display_name)).all())
+    engine.dispose()
+    assert names["member1@example.com"] == "Custom"
+    assert names["member2@example.com"] == "Bailey"
 
 
 def test_items_shape(seeded):
@@ -244,6 +270,14 @@ def test_signing_in_as_seeded_owner_and_reveal(seeded):
                 assert "Anonymous" in li and "@" not in li
             # no anonymous author appears next to an anonymous item
             assert body.count("Anonymous") >= len(anon_texts)
+            # named items show the seed names; no email anywhere on the page
+            for _, _, anonymous, item_text in seed_module.SAMPLE_ITEMS:
+                if not anonymous:
+                    li = re.search(r"<li>[^<]*" + re.escape(item_text) + r".*?</li>", body, re.S).group(0)
+                    assert any(name in li for name in DEMO_NAMES.values())
+            for email in SEED_EMAILS:
+                assert email not in html
+            assert "Signed in as Olivia Owner" in html
     finally:
         app.dependency_overrides.pop(get_now, None)
         app.dependency_overrides.pop(get_settings, None)

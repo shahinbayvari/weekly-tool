@@ -30,7 +30,7 @@ def _ddl(engine):
 
 def _user(conn, email="a@example.com", role="member"):
     return conn.execute(
-        text("INSERT INTO users (email, password_hash, role) VALUES (:e, 'h', :r)"),
+        text("INSERT INTO users (email, password_hash, role, display_name) VALUES (:e, 'h', :r, 'Name')"),
         {"e": email, "r": role},
     ).lastrowid
 
@@ -232,4 +232,95 @@ def test_make_engine_defaults_to_weekly_db_path(monkeypatch):
     monkeypatch.setenv("WEEKLY_DB_PATH", "somewhere.db")
     engine = make_engine()
     assert engine.url.database == "somewhere.db"
+    engine.dispose()
+
+
+# --- display_name (#29) -------------------------------------------------------
+
+
+def test_display_name_column_is_text_not_null_without_default(db_engine):
+    column = next(c for c in inspect(db_engine).get_columns("users") if c["name"] == "display_name")
+    assert column["nullable"] is False
+    assert column["default"] is None
+    assert str(column["type"]).upper() in ("TEXT", "VARCHAR")
+
+
+def test_display_name_rejects_null_and_missing(db_engine):
+    with pytest.raises(IntegrityError, match="NOT NULL"):
+        with db_engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO users (email, password_hash, role, display_name) VALUES ('n@e.com', 'h', 'member', NULL)")
+            )
+    with pytest.raises(IntegrityError, match="NOT NULL"):
+        with db_engine.begin() as conn:
+            conn.execute(text("INSERT INTO users (email, password_hash, role) VALUES ('m@e.com', 'h', 'member')"))
+
+
+def _alembic_config(db_path):
+    from alembic.config import Config
+
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "migrations"))
+    cfg.attributes["db_path"] = str(db_path)
+    return cfg
+
+
+def _db_at_0002(tmp_path):
+    from alembic import command
+
+    db = tmp_path / "old.db"
+    command.upgrade(_alembic_config(db), "0002")
+    engine = make_engine(str(db))
+    with engine.begin() as conn:
+        for email, role in [
+            ("Sam.Lee@example.com", "owner"),
+            ("Anonymous@example.com", "member"),
+            ("@odd.example.com", "member"),
+            (f"{'x' * 60}@example.com", "member"),
+            ("ANONYMOUS@example.com", "member"),
+        ]:
+            conn.execute(
+                text("INSERT INTO users (email, password_hash, role) VALUES (:e, 'h', :r)"), {"e": email, "r": role}
+            )
+        conn.execute(text("INSERT INTO project (name) VALUES ('p')"))
+        conn.execute(
+            text("INSERT INTO feedback_items (author_id, week, category, text) VALUES (1, '2026-W01', 'start', 'kept')")
+        )
+    return db, engine
+
+
+def test_migration_0003_backfills_display_names_from_email(tmp_path):
+    from alembic import command
+
+    db, engine = _db_at_0002(tmp_path)
+    engine.dispose()
+    command.upgrade(_alembic_config(db), "head")
+    engine = make_engine(str(db))
+    with engine.connect() as conn:
+        names = dict(conn.execute(text("SELECT id, display_name FROM users")).all())
+        assert names == {1: "Sam.Lee", 2: "User 2", 3: "User 3", 4: "x" * 50, 5: "User 5"}
+        assert conn.execute(text("SELECT count(*) FROM users")).scalar_one() == 5
+        assert conn.execute(text("SELECT author_id, text FROM feedback_items")).all() == [(1, "kept")]
+        assert conn.execute(text("PRAGMA foreign_key_check")).all() == []
+        assert conn.execute(text("SELECT email, role FROM users WHERE id = 1")).one() == ("Sam.Lee@example.com", "owner")
+    engine.dispose()
+    command.upgrade(_alembic_config(db), "head")  # second run changes nothing
+    engine = make_engine(str(db))
+    with engine.connect() as conn:
+        assert dict(conn.execute(text("SELECT id, display_name FROM users")).all()) == names
+    engine.dispose()
+
+
+def test_migration_0003_downgrade_drops_the_column(tmp_path):
+    from alembic import command
+
+    db, engine = _db_at_0002(tmp_path)
+    engine.dispose()
+    command.upgrade(_alembic_config(db), "head")
+    command.downgrade(_alembic_config(db), "0002")
+    engine = make_engine(str(db))
+    with engine.connect() as conn:
+        assert "display_name" not in [c["name"] for c in inspect(conn).get_columns("users")]
+        assert conn.execute(text("SELECT count(*) FROM users")).scalar_one() == 5
+        assert conn.execute(text("SELECT count(*) FROM feedback_items")).scalar_one() == 1
     engine.dispose()

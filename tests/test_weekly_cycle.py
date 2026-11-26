@@ -31,7 +31,9 @@ SETTINGS = Settings(
     setup_token=SETUP_TOKEN,
 )
 OWNER = "owner@example.com"
+OWNER_NAME = "Olivia Owner"
 ANN = "ann@example.com"
+ANN_NAME = "Ann Alpha"
 PASSWORD = "correct horse battery"
 HX = {"HX-Request": "true"}
 
@@ -119,12 +121,12 @@ def walk(owner, ann, clock, fake, engine):
     # 1. Setup: the owner is created and signed in.
     r = owner.post(
         "/setup",
-        data={"project_name": "Team", "email": OWNER, "password": PASSWORD, "confirm_password": PASSWORD,
-              "setup_token": SETUP_TOKEN},
+        data={"project_name": "Team", "email": OWNER, "display_name": OWNER_NAME, "password": PASSWORD,
+              "confirm_password": PASSWORD, "setup_token": SETUP_TOKEN},
     )
     assert r.status_code == 303
     page = owner.get("/submit")
-    assert page.status_code == 200 and f"Signed in as {OWNER}" in page.text
+    assert page.status_code == 200 and f"Signed in as {OWNER_NAME}" in page.text and OWNER not in page.text
     assert owner.get("/invites").status_code == 200  # owner-only page
 
     # 2. Invite: the owner invites ann, the link is taken from the response page.
@@ -135,10 +137,10 @@ def walk(owner, ann, clock, fake, engine):
     assert path.startswith("/invite/")
     assert ann.get("/submit").status_code == 303  # not signed in yet
     assert ann.get(path).status_code == 200
-    r = ann.post(path, data={"password": PASSWORD, "confirm_password": PASSWORD})
+    r = ann.post(path, data={"display_name": ANN_NAME, "password": PASSWORD, "confirm_password": PASSWORD})
     assert r.status_code == 303
     page = ann.get("/submit")
-    assert page.status_code == 200 and f"Signed in as {ANN}" in page.text
+    assert page.status_code == 200 and f"Signed in as {ANN_NAME}" in page.text and ANN not in page.text
     assert ann.get("/invites").status_code in (403, 404)  # a member, not an owner
     assert ann.get("/missing").status_code in (403, 404)
 
@@ -149,10 +151,10 @@ def walk(owner, ann, clock, fake, engine):
     assert OWNER_TEXT not in ann.get("/submit").text
     assert item_ids(ann.get("/submit").text) == []
 
-    # 4. Missing list: team of two, one submitted -> only the count, never ann's email.
+    # 4. Missing list: team of two, one submitted -> only the count, never ann's email or name.
     r = owner.get("/missing")
     assert "1 person has not submitted" in r.text
-    assert ANN not in r.text
+    assert ANN not in r.text and ANN_NAME not in r.text
 
     # 5. Reminder: Thursday 17:00 emails only ann; a second run sends nothing.
     clock.now = THU_REMINDER
@@ -168,18 +170,18 @@ def walk(owner, ann, clock, fake, engine):
     assert "Anonymous: on" in ann.get("/submit").text
     assert "Everyone has submitted" in owner.get("/missing").text
 
-    # 7. Hidden while open. NOTE: the criterion says ann's email must not appear anywhere in the
-    # page source, but since #22 every page shows the viewer's own email in the header ("Signed in
-    # as ..."). So for the owner's page ann's email is absent entirely; for ann's own page the only
-    # occurrence is that header line.
+    # 7. Hidden while open. Emails never appear on the reveal page; a name appears only in the
+    # header of its own viewer ("Signed in as ..."), so ann's name is absent from the owner's page.
     for client in (owner, ann):
         html = client.get("/reveal").text
         assert "Results are hidden until" in html
         for t in (OWNER_TEXT, ANN_NAMED, ANN_ANON):
             assert t not in html
-    assert ANN not in owner.get("/reveal").text
+    owner_html = owner.get("/reveal").text
+    assert ANN not in owner_html and ANN_NAME not in owner_html and OWNER not in owner_html
     ann_html = ann.get("/reveal").text
-    assert ann_html.count(ANN) == 1 and f"Signed in as {ANN}" in ann_html
+    assert ANN not in ann_html and OWNER not in ann_html
+    assert ann_html.count(ANN_NAME) == 1 and f"Signed in as {ANN_NAME}" in ann_html
 
     # 8. Deadline: one microsecond before, ann can still edit; at 17:00 sharp everything is refused.
     clock.now = DEADLINE - timedelta(microseconds=1)
@@ -241,14 +243,18 @@ def walk(owner, ann, clock, fake, engine):
 
 
 def assert_revealed(client, named, *, viewer):
+    """`viewer` is the viewer's email; the page shows names only, never an email."""
     html = client.get("/reveal").text
     assert "Week of 23 Nov 2026" in html and "Results are hidden" not in html
     start, stop, cont = column(html, "start"), column(html, "stop"), column(html, "continue")
-    assert OWNER_TEXT in start and OWNER in start
-    assert named in stop and ANN in stop
-    assert ANN_ANON in cont and "Anonymous" in cont and ANN not in cont and OWNER not in cont
-    assert ANN not in start and OWNER not in stop
-    # Ann's email is next to her named item; in her own view it also appears in the header.
+    assert OWNER_TEXT in start and OWNER_NAME in start
+    assert named in stop and ANN_NAME in stop
+    assert ANN_ANON in cont and "Anonymous" in cont and ANN_NAME not in cont and OWNER_NAME not in cont
+    assert ANN_NAME not in start and OWNER_NAME not in stop
+    assert ANN not in html and OWNER not in html  # no email anywhere, not even the viewer's own
+    # A name appears next to its named item; in the viewer's own view it also appears in the header.
     body = strip_csrf(html)
-    assert body.count(ANN) == (2 if viewer == ANN else 1)
-    assert (f"Signed in as {ANN}" in body) == (viewer == ANN)
+    assert body.count(ANN_NAME) == (2 if viewer == ANN else 1)
+    assert body.count(OWNER_NAME) == (2 if viewer == OWNER else 1)
+    assert (f"Signed in as {ANN_NAME}" in body) == (viewer == ANN)
+    assert (f"Signed in as {OWNER_NAME}" in body) == (viewer == OWNER)

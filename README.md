@@ -61,9 +61,9 @@ The app does not create or migrate the database itself (the seed command does, s
 
 ## First run
 
-1. Set `WEEKLY_SETUP_TOKEN` (see the table below) before starting the server, then open http://127.0.0.1:8000/setup, enter the token in the "Setup token" field and create the owner account. In development the token can be left unset and the field is not shown; in production it is required. This page only works until the first user exists.
-2. Sign in at `/login`, then open `/invites` and invite members by email. The invite link is shown on screen, once: copy it and send it to the member. The member opens the link and chooses a password.
-3. Members add items at `/submit` and read the revealed results at `/reveal` after the deadline. The owner sees who has not submitted at `/missing`.
+1. Set `WEEKLY_SETUP_TOKEN` (see the table below) before starting the server, then open http://127.0.0.1:8000/setup, enter the token in the "Setup token" field and create the owner account with your email, a name (up to 50 characters, shown to the team instead of your email) and a password. In development the token can be left unset and the field is not shown; in production it is required. This page only works until the first user exists.
+2. Sign in at `/login`, then open `/invites` and invite members by email. The invite link is shown on screen, once: copy it and send it to the member. The member opens the link and chooses a name (up to 50 characters, the same rules as the owner's) and a password. Names need not be unique, and "Anonymous" is not allowed because the results page uses it for anonymous items. People still sign in with their email and password.
+3. Members add items at `/submit` and read the revealed results at `/reveal` after the deadline: a named item shows its author's chosen name (never their email), an anonymous item shows "Anonymous". The header shows only your own name. The owner sees who has not submitted at `/missing`.
 
 Key pages: `/setup`, `/login`, `/submit`, `/reveal`, and for the owner `/invites` and `/missing`.
 
@@ -125,7 +125,7 @@ A reminder is recorded only after the email was sent. Runs that do not overlap n
 uv run python -m app.seed
 ```
 
-This creates a "Demo Project", the owner `owner@example.com` and members `member1@example.com` to `member5@example.com`, with sample items. All six use the password `demo-password`. That password is public: use the seed for local demos only. The seed writes users directly and does not need `WEEKLY_SETUP_TOKEN`.
+This creates a "Demo Project", the owner `owner@example.com` (named Olivia Owner) and members `member1@example.com` to `member5@example.com` (named Alex, Bailey, Casey, Dana and Eli), with sample items. Sign in with the email addresses; the names are what the pages show. All six use the password `demo-password`. That password is public: use the seed for local demos only. The seed writes users directly and does not need `WEEKLY_SETUP_TOKEN`.
 
 - `--week YYYY-MM-DD` fills a specific week instead of the current one. The date must be a day on which the window opens, for example a Monday.
 - It applies the database migrations itself.

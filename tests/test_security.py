@@ -166,7 +166,7 @@ def test_setup_without_token_creates_nothing(db_engine, monkeypatch):
     from tests.conftest import isolated_db
 
     with isolated_db(monkeypatch) as engine, CsrfClient(app, follow_redirects=False) as c:
-        data = {"project_name": "P", "email": "o@example.com", "password": PW, "confirm_password": PW}
+        data = {"project_name": "P", "email": "o@example.com", "display_name": "Owen", "password": PW, "confirm_password": PW}
         assert c.post("/setup", data=data, csrf=False).status_code == 403
         assert count(engine, "users") == 0 and count(engine, "project") == 0
         assert c.post("/setup", data=data).status_code == 303
@@ -188,10 +188,10 @@ def test_logout_without_token_keeps_session(owner):
 
 def test_accept_invite_without_token_creates_no_user(client, db_engine):
     users_before = count(db_engine, "users")
-    r = client.post(f"/invite/{INVITE_TOKEN}", data={"password": PW, "confirm_password": PW}, csrf=False)
+    r = client.post(f"/invite/{INVITE_TOKEN}", data={"display_name": "Newbie", "password": PW, "confirm_password": PW}, csrf=False)
     assert r.status_code == 403
     assert count(db_engine, "users") == users_before
-    assert client.post(f"/invite/{INVITE_TOKEN}", data={"password": PW, "confirm_password": PW}).status_code == 303
+    assert client.post(f"/invite/{INVITE_TOKEN}", data={"display_name": "Newbie", "password": PW, "confirm_password": PW}).status_code == 303
 
 
 def test_create_and_revoke_invite_without_token_change_nothing(owner, db_engine):

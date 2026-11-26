@@ -9,7 +9,8 @@ The week must be a real YYYY-MM-DD date on which the configured window opens
 (Monday by default), the same rule as app.reveal; anything else is an error.
 
 Creates the project "Demo Project", the owner owner@example.com and members
-member1@example.com .. member5@example.com, all with the demo password
+member1@example.com .. member5@example.com (display names Olivia Owner, Alex, Bailey,
+Casey, Dana, Eli), all with the demo password
 "demo-password" (DEMO_PASSWORD). That password is public on purpose: use this
 only for local demos, never on a real deployment. It prints the owner email, the
 password and the week used.
@@ -51,6 +52,7 @@ PROJECT_NAME = "Demo Project"
 OWNER_EMAIL = "owner@example.com"
 MEMBER_EMAILS = tuple(f"member{n}@example.com" for n in range(1, 6))
 SEED_EMAILS = (OWNER_EMAIL, *MEMBER_EMAILS)
+SEED_NAMES = dict(zip(SEED_EMAILS, ("Olivia Owner", "Alex", "Bailey", "Casey", "Dana", "Eli")))
 
 # (author email, category, anonymous, text). member5 deliberately has no items.
 SAMPLE_ITEMS = (
@@ -112,7 +114,13 @@ def seed(week: str, db_path: str, schedule: Schedule, *, engine: Engine | None =
             with Session(engine) as session:
                 exists = session.scalar(select(User.id).where(User.email == normalise_email(email)))
             if exists is None:
-                create_user(email, DEMO_PASSWORD, "owner" if email == OWNER_EMAIL else "member", engine=engine)
+                create_user(
+                    email,
+                    DEMO_PASSWORD,
+                    "owner" if email == OWNER_EMAIL else "member",
+                    display_name=SEED_NAMES[email],
+                    engine=engine,
+                )
                 created_users += 1
 
         with Session(engine) as session:

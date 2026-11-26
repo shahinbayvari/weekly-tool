@@ -22,8 +22,8 @@ AFTER = datetime(2026, 1, 10, 12, 0, tzinfo=TZ)
 
 @pytest.fixture
 def users(db_engine):
-    ann = create_user("ann@example.com", "correct horse", "member", engine=db_engine)
-    bob = create_user("bob@example.com", "correct horse", "member", engine=db_engine)
+    ann = create_user("ann@example.com", "correct horse", "member", display_name="Ann Alpha", engine=db_engine)
+    bob = create_user("bob@example.com", "correct horse", "member", display_name="Bob Beta", engine=db_engine)
     return ann, bob
 
 
@@ -114,9 +114,9 @@ def test_grouping_and_item_shapes(db_engine, users):
     add(db_engine, bob, "stop", "t1", anonymous=True)
     add(db_engine, bob, "continue", "c1")
     r = reveal(db_engine)
-    assert r.start == (NamedItem("s1", "start", "ann@example.com"),)
+    assert r.start == (NamedItem("s1", "start", "Ann Alpha"),)
     assert r.stop == (AnonymousItem("t1", "stop"),)
-    assert r.continue_ == (NamedItem("c1", "continue", "bob@example.com"),)
+    assert r.continue_ == (NamedItem("c1", "continue", "Bob Beta"),)
     assert r.by_category("continue") == r.continue_
     assert set(asdict(r.stop[0])) == {"text", "category"}
 
@@ -138,8 +138,10 @@ def test_anonymous_author_not_in_serialisation(db_engine, users):
     blobs = [repr(r), str(r), json.dumps(asdict(r)), json.dumps(asdict(r), default=str)]
     for blob in blobs:
         assert "ann@example.com" not in blob
-        assert "ann" not in blob
-        assert "bob@example.com" in blob
+        assert "ann" not in blob.lower()
+        assert "Ann Alpha" not in blob
+        assert "Bob Beta" in blob
+        assert "bob@example.com" not in blob
     # The author's id and the item ids are not present as fields or values on anonymous items.
     anon_items = [i for i in (*r.start, *r.stop) if isinstance(i, AnonymousItem)]
     assert len(anon_items) == 2
@@ -148,14 +150,17 @@ def test_anonymous_author_not_in_serialisation(db_engine, users):
         assert ann.id not in asdict(item).values() and anon1.id not in asdict(item).values() and anon2.id not in asdict(item).values()
 
 
-def test_mixed_author_email_only_on_named(db_engine, users):
+def test_mixed_author_name_only_on_named(db_engine, users):
     ann, _ = users
     add(db_engine, ann, "start", "named", anonymous=False)
     add(db_engine, ann, "start", "hidden", anonymous=True)
     r = reveal(db_engine)
     by_text = {i.text: i for i in r.start}
-    assert by_text["named"].email == "ann@example.com"
+    assert by_text["named"].display_name == "Ann Alpha"
+    assert not hasattr(by_text["named"], "email")
+    assert not hasattr(by_text["hidden"], "display_name")
     assert not hasattr(by_text["hidden"], "email")
+    assert "Ann Alpha" not in repr(by_text["hidden"])
     assert "ann@example.com" not in repr(by_text["hidden"])
 
 
@@ -185,8 +190,8 @@ def test_same_text_named_and_anonymous_deterministic(db_engine, users):
     add(db_engine, ann, "start", "same")
     assert reveal(db_engine).start == (
         AnonymousItem("same", "start"),
-        NamedItem("same", "start", "ann@example.com"),
-        NamedItem("same", "start", "bob@example.com"),
+        NamedItem("same", "start", "Ann Alpha"),
+        NamedItem("same", "start", "Bob Beta"),
     )
 
 
@@ -200,8 +205,8 @@ def test_same_text_result_independent_of_insertion_order(monkeypatch, users, db_
     from tests.conftest import isolated_db
 
     with isolated_db(monkeypatch) as engine2:
-        ann2 = create_user("ann@example.com", "correct horse", "member", engine=engine2)
-        bob2 = create_user("bob@example.com", "correct horse", "member", engine=engine2)
+        ann2 = create_user("ann@example.com", "correct horse", "member", display_name="Ann Alpha", engine=engine2)
+        bob2 = create_user("bob@example.com", "correct horse", "member", display_name="Bob Beta", engine=engine2)
         add(engine2, bob2, "start", "same")
         add(engine2, bob2, "start", "same", anonymous=True)
         add(engine2, ann2, "start", "same")
@@ -228,7 +233,7 @@ def test_anonymous_query_selects_only_text_and_category(db_engine, users):
     assert len(named) == 1 and len(anon) == 1
     columns = anon[0].split("FROM")[0]
     assert "feedback_items.text" in columns and "feedback_items.category" in columns
-    for forbidden in ("author_id", "feedback_items.id", "created_at", "updated_at", "email", "anonymous"):
+    for forbidden in ("author_id", "feedback_items.id", "created_at", "updated_at", "email", "display_name", "anonymous"):
         assert forbidden not in columns
     assert "JOIN" not in anon[0].upper()
     # The named query only ever covers non-anonymous rows.
@@ -239,3 +244,37 @@ def test_default_engine(db_engine, users):
     ann, _ = users
     add(db_engine, ann, "start", "x")
     assert len(reveal_week(WEEK, AFTER, settings=SETTINGS).start) == 1
+
+
+def test_named_query_selects_display_name_not_email(db_engine, users):
+    ann, _ = users
+    add(db_engine, ann, "start", "named")
+    log = statements(db_engine)
+    reveal(db_engine)
+    named = [s for s in log if s.lstrip().upper().startswith("SELECT") and "users" in s]
+    assert len(named) == 1
+    columns = named[0].split("FROM")[0]
+    assert "users.display_name" in columns
+    assert "email" not in columns
+
+
+def test_duplicate_display_names_each_show_their_name(db_engine):
+    sam1 = create_user("sam1@example.com", "correct horse", "member", display_name="Sam", engine=db_engine)
+    sam2 = create_user("sam2@example.com", "correct horse", "member", display_name="Sam", engine=db_engine)
+    add(db_engine, sam1, "start", "first")
+    add(db_engine, sam2, "start", "second")
+    assert reveal(db_engine).start == (NamedItem("first", "start", "Sam"), NamedItem("second", "start", "Sam"))
+
+
+def test_same_text_named_items_sorted_by_display_name(db_engine):
+    zed = create_user("a@example.com", "correct horse", "member", display_name="Zed", engine=db_engine)
+    amy = create_user("z@example.com", "correct horse", "member", display_name="Amy", engine=db_engine)
+    add(db_engine, zed, "start", "same")
+    add(db_engine, amy, "start", "same")
+    assert [i.display_name for i in reveal(db_engine).start] == ["Amy", "Zed"]
+
+
+def test_emoji_and_non_latin_names_are_intact(db_engine):
+    user = create_user("e@example.com", "correct horse", "member", display_name="Zoë 李雷 😀", engine=db_engine)
+    add(db_engine, user, "start", "x")
+    assert reveal(db_engine).start[0].display_name == "Zoë 李雷 😀"

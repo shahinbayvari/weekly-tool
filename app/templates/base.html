@@ -12,9 +12,9 @@
   <header class="site-header">
     <div class="site-header-row">
       <span class="site-name">{{ page.project_name }}</span>
-      {% if page.email %}
+      {% if page.display_name %}
       <div class="account">
-        <span>Signed in as {{ page.email }}</span>
+        <span class="person">Signed in as {{ page.display_name }}</span>
         <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Log out</button></form>
       </div>
       {% endif %}

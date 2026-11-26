@@ -43,9 +43,9 @@ def clock():
 @pytest.fixture
 def users(db_engine):
     made = {
-        "owner": create_user("owner@example.com", PW, "owner", engine=db_engine),
-        "ann": create_user("ann@example.com", PW, "member", engine=db_engine),
-        "bob": create_user("bob@example.com", PW, "member", engine=db_engine),
+        "owner": create_user("owner@example.com", PW, "owner", display_name="Olivia Owner", engine=db_engine),
+        "ann": create_user("ann@example.com", PW, "member", display_name="Ann Alpha", engine=db_engine),
+        "bob": create_user("bob@example.com", PW, "member", display_name="Bob Beta", engine=db_engine),
     }
     set_installed(db_engine, "2026-01-01 00:00:00")
     return made
@@ -80,7 +80,7 @@ def column(html, name):
 def get(client):
     r = client.get("/reveal")
     assert r.status_code == 200
-    # the shared page header (name, own email, nav, log out) is covered by tests/test_layout.py;
+    # the shared page header (name, own display name, nav, log out) is covered by tests/test_layout.py;
     # these tests are about the page content, which differs from the header per role
     return re.sub(r"<header.*?</header>", "", strip_csrf(r.text), flags=re.S)
 
@@ -98,8 +98,9 @@ def test_owner_and_members_see_same_results(db_engine, clock, users):
     for email in ("owner@example.com", "ann@example.com", "bob@example.com"):
         with CsrfClient(app, follow_redirects=False) as c:
             sign_in(c, email)
-            pages.append(re.sub(r"Signed in as \S+", "", get(c)))
+            pages.append(get(c))  # get() drops the header, which is the only part that differs per viewer
     assert pages[0] == pages[1] == pages[2]
+    assert not any("Signed in as" in page for page in pages)
     assert "shared text" in pages[0]
 
 
@@ -129,17 +130,19 @@ def test_three_columns_in_order_with_all_items(client, db_engine, users):
     assert "c1" in column(html, "continue") and "c2" in column(html, "continue")
 
 
-def test_named_shows_email_anonymous_shows_nothing_else(client, db_engine, users):
+def test_named_shows_name_anonymous_shows_nothing_else(client, db_engine, users):
     seed(db_engine, users["ann"], "named one")
     seed(db_engine, users["bob"], "secret one", anonymous=True)
     html = get(client)
-    assert "ann@example.com" in html.split("named one")[1].split("</li>")[0]
+    named_li = html.split("named one")[1].split("</li>")[0]
+    assert "Ann Alpha" in named_li
+    assert "@" not in named_li and "ann@example.com" not in html
     li = re.search(r"<li>[^<]*secret one.*?</li>", html, re.S).group(0)
     assert "Anonymous" in li
-    assert "@" not in li and "bob" not in li
+    assert "@" not in li and "bob" not in li.lower() and "Bob Beta" not in li
     assert "<!--" not in html and 'type="hidden"' not in html
     assert "data-" not in html and "title=" not in html
-    assert "bob@example.com" not in html
+    assert "bob@example.com" not in html and "Bob Beta" not in html
 
 
 def test_empty_columns_show_no_items(client, db_engine, users):
@@ -179,7 +182,7 @@ def test_open_window_source_has_nothing_from_current_week(client, db_engine, use
     html = get(client)
     for forbidden in ("CURRENT-WEEK-TEXT", "CURRENT-ANON-TEXT", "2026-11-23", "23 Nov"):
         assert forbidden not in html
-    assert "bob@example.com" not in html
+    assert "bob@example.com" not in html and "Bob Beta" not in html
     assert "OLD-ITEM" in html
 
 
@@ -216,3 +219,72 @@ def test_genuine_earlier_week_without_items_shows_three_columns(client, db_engin
     html = get(client)  # installed in January, nothing in the previous week
     assert "No earlier results" not in html
     assert html.count("No items") == 3
+
+
+def test_no_email_on_the_page_for_any_viewer_including_own(db_engine, clock, users):
+    for key in ("owner", "ann", "bob"):
+        seed(db_engine, users[key], f"named {key}")
+        seed(db_engine, users[key], f"hidden {key}", "stop", anonymous=True)
+    emails = ("owner@example.com", "ann@example.com", "bob@example.com")
+    for email in emails:
+        with CsrfClient(app, follow_redirects=False) as c:
+            sign_in(c, email)
+            r = c.get("/reveal")
+        assert r.status_code == 200
+        for other in emails:
+            assert other not in r.text, (email, other)
+        assert "@" not in re.sub(r"<header.*?</header>", "", r.text, flags=re.S)
+
+
+def test_name_counts_match_named_items_and_header_only(db_engine, clock, users):
+    seed(db_engine, users["ann"], "named a1")
+    seed(db_engine, users["ann"], "named a2", "stop")
+    seed(db_engine, users["ann"], "hidden a3", "continue", anonymous=True)
+    seed(db_engine, users["bob"], "hidden b1", anonymous=True)
+    seed(db_engine, users["owner"], "named o1")
+    for email, name, expected in (
+        ("ann@example.com", "Ann Alpha", 2 + 1),  # two named items plus the header
+        ("bob@example.com", "Bob Beta", 0 + 1),  # only the header
+        ("owner@example.com", "Olivia Owner", 1 + 1),
+    ):
+        with CsrfClient(app, follow_redirects=False) as c:
+            sign_in(c, email)
+            html = c.get("/reveal").text
+        assert html.count(name) == expected, (email, name)
+        for other in ("Ann Alpha", "Bob Beta", "Olivia Owner"):
+            if other != name:
+                assert html.count(other) == {"Ann Alpha": 2, "Bob Beta": 0, "Olivia Owner": 1}[other]
+
+
+def test_duplicate_names_on_one_page_each_show_the_name(db_engine, clock, users):
+    sam1 = create_user("sam1@example.com", PW, "member", display_name="Sam", engine=db_engine)
+    sam2 = create_user("sam2@example.com", PW, "member", display_name="Sam", engine=db_engine)
+    seed(db_engine, sam1, "item one")
+    seed(db_engine, sam2, "item two")
+    with CsrfClient(app, follow_redirects=False) as c:
+        sign_in(c, "ann@example.com")
+        html = get(c)
+    assert re.search(r"item one <span class=\"author\">Sam</span>", html)
+    assert re.search(r"item two <span class=\"author\">Sam</span>", html)
+    assert "sam1@example.com" not in html and "sam2@example.com" not in html
+
+
+def test_name_is_escaped_never_html(db_engine, clock, users):
+    evil = create_user("evil@example.com", PW, "member", display_name="<b>x</b>", engine=db_engine)
+    seed(db_engine, evil, "evil item")
+    html = get_with(users, "ann@example.com")
+    assert "&lt;b&gt;x&lt;/b&gt;" in html
+    assert "<b>" not in html
+
+
+def get_with(users, email):
+    with CsrfClient(app, follow_redirects=False) as c:
+        sign_in(c, email)
+        return get(c)
+
+
+def test_emoji_and_non_latin_names_are_shown_intact(db_engine, clock, users):
+    name = "Zoë 李雷 😀"
+    person = create_user("zoe@example.com", PW, "member", display_name=name, engine=db_engine)
+    seed(db_engine, person, "zoe item")
+    assert f'<span class="author">{name}</span>' in get_with(users, "ann@example.com")

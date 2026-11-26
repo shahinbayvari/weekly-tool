@@ -2,7 +2,15 @@ import pytest
 from sqlalchemy import text
 
 from app.passwords import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, WeakPasswordError, verify_password
-from app.users import DuplicateEmailError, InvalidEmailError, create_user, find_user_by_email
+from app.users import (
+    DuplicateEmailError,
+    InvalidDisplayNameError,
+    InvalidEmailError,
+    create_user,
+    default_display_name,
+    find_user_by_email,
+    validate_display_name,
+)
 
 PW = "correct horse"
 
@@ -101,3 +109,112 @@ def test_create_user_makes_a_current_hash(db_engine):
 
     user = create_user("zed@example.com", "correct horse", "member", engine=db_engine)
     assert needs_rehash(user.password_hash) is False
+
+
+# --- display names (#29) ---------------------------------------------------------
+
+
+def names(engine):
+    with engine.connect() as c:
+        return [r[0] for r in c.execute(text("SELECT display_name FROM users ORDER BY id"))]
+
+
+def test_create_user_default_name_is_the_email_local_part(db_engine):
+    user = create_user("  Ann.Lee@Example.COM ", PW, "member", engine=db_engine)
+    assert user.display_name == "ann.lee"  # emails are stored lower-cased
+    assert names(db_engine) == ["ann.lee"]
+
+
+def test_create_user_default_name_cut_to_50(db_engine):
+    create_user("x" * 60 + "@example.com", PW, "member", engine=db_engine)
+    assert names(db_engine) == ["x" * 50]
+
+
+def test_create_user_default_name_falls_back_to_user_id(db_engine):
+    create_user("@example.com", PW, "member", engine=db_engine)
+    create_user("Anonymous@example.com", PW, "member", engine=db_engine)
+    assert names(db_engine) == ["User 1", "User 2"]
+
+
+def test_create_user_explicit_name_is_validated_and_trimmed(db_engine):
+    assert create_user("a@example.com", PW, "member", display_name="  Sam  ", engine=db_engine).display_name == "Sam"
+    for i, bad in enumerate(("", "  ", "anonymous", "a\nb", "x" * 51)):
+        with pytest.raises(InvalidDisplayNameError):
+            create_user(f"bad{i}@example.com", PW, "member", display_name=bad, engine=db_engine)
+    assert names(db_engine) == ["Sam"]
+
+
+def test_duplicate_names_allowed_and_duplicate_email_still_rejected(db_engine):
+    create_user("a@example.com", PW, "member", display_name="Sam", engine=db_engine)
+    create_user("b@example.com", PW, "member", display_name="Sam", engine=db_engine)
+    with pytest.raises(DuplicateEmailError):
+        create_user("a@example.com", PW, "member", display_name="Other", engine=db_engine)
+    assert names(db_engine) == ["Sam", "Sam"]
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Sam", "Sam"),
+        ("  Sam  ", "Sam"),
+        ("Sam  Lee", "Sam  Lee"),
+        ("x" * 50, "x" * 50),
+        ("\U0001f600" * 50, "\U0001f600" * 50),
+        ("Zoë 李雷", "Zoë 李雷"),
+        ("Anonymous Al", "Anonymous Al"),
+        ("Anonymou", "Anonymou"),
+        ("\U0001f468\u200d\U0001f469", "\U0001f468\u200d\U0001f469"),  # a zero-width joiner inside a name is fine
+        ("<b>x</b>", "<b>x</b>"),
+        ("Sam\n", "Sam"),  # trailing whitespace is trimmed, not rejected
+    ],
+)
+def test_validate_display_name_accepts(raw, expected):
+    assert validate_display_name(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,message",
+    [
+        ("", "Enter a name"),
+        (" \t\n ", "Enter a name"),
+        ("\u200b", "Enter a name"),
+        ("\u200b \ufeff\u2060", "Enter a name"),
+        ("\u00a0\u3000", "Enter a name"),
+        ("x" * 51, "Name must be at most 50 characters"),
+        ("\U0001f600" * 51, "Name must be at most 50 characters"),
+        ("a\nb", "Name must be a single line"),
+        ("a\rb", "Name must be a single line"),
+        ("a\tb", "Name must be a single line"),
+        ("a\x00b", "Name must be a single line"),
+        ("a\x1fb", "Name must be a single line"),
+        ("a\x7fb", "Name must be a single line"),
+        ("a\x85b", "Name must be a single line"),
+        ("a\x9fb", "Name must be a single line"),
+        ("a\u2028b", "Name must be a single line"),
+        ("a\u2029b", "Name must be a single line"),
+        ("anonymous", "Choose a different name"),
+        ("ANONYMOUS", "Choose a different name"),
+        (" Anonymous ", "Choose a different name"),
+        ("Anon\u200bymous", "Choose a different name"),
+    ],
+)
+def test_validate_display_name_rejects(raw, message):
+    with pytest.raises(InvalidDisplayNameError) as info:
+        validate_display_name(raw)
+    assert str(info.value) == message
+
+
+@pytest.mark.parametrize(
+    "email,uid,expected",
+    [
+        ("ann@example.com", 3, "ann"),
+        ("ann.lee+tag@example.com", 3, "ann.lee+tag"),
+        ("@example.com", 7, "User 7"),
+        ("anonymous@example.com", 8, "User 8"),
+        ("ANONYMOUS@example.com", 8, "User 8"),
+        ("x" * 80 + "@e.com", 1, "x" * 50),
+        ("no-at-sign", 2, "no-at-sign"),
+    ],
+)
+def test_default_display_name(email, uid, expected):
+    assert default_display_name(email, uid) == expected

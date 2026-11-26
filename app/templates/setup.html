@@ -7,6 +7,7 @@
   <form method="post" action="/setup"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Project name <input type="text" name="project_name" value="{{ project_name }}" required></label>
     <label>Email <input type="email" name="email" value="{{ email }}" autocomplete="username" required></label>
+    <label>Name <input type="text" name="display_name" value="{{ display_name }}" maxlength="50" autocomplete="name" required></label>
     <label>Password <input type="password" name="password" autocomplete="new-password" required></label>
     <label>Confirm password <input type="password" name="confirm_password" autocomplete="new-password" required></label>
     {% if token_required %}<label>Setup token <input type="password" name="setup_token" autocomplete="off" required></label>

@@ -37,6 +37,23 @@ The reminder job (#19) keeps using the full `missing_submitters` list. Each
 member only learns their own status from a reminder, so nothing about other
 people is revealed.
 
+## Display names
+
+Every user has a display name chosen at sign-up (#29). It replaces the email
+wherever the app shows who someone is on the reveal page and in the header.
+
+- Named items on the reveal page show only the author's display name, never
+  the email and never "name (email)". Names need not be unique and nothing
+  disambiguates two people with the same name.
+- The anonymous query still reads only `text` and `category`: it does not
+  join `users` and never selects `display_name`, so no author data is loaded
+  for anonymous items. The name "Anonymous" (any letter case) cannot be
+  chosen, because the reveal page uses that word for anonymous items.
+- The header shows only the viewer's own name ("Signed in as ..."), on every
+  page for every viewer. No email appears on the reveal page.
+- The missing-list safeguard above is unchanged: `/missing` and `/invites`
+  still show emails, and `MIN_SUBMITTERS_FOR_NAMES` works as before.
+
 ## Known limits (not solved here)
 
 - The owner knows which items are their own. With the owner and exactly two

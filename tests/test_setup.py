@@ -24,7 +24,13 @@ def client(db_engine):
 
 
 def data(**over):
-    d = {"project_name": "Team A", "email": "Owner@Example.com", "password": PW, "confirm_password": PW}
+    d = {
+        "project_name": "Team A",
+        "email": "Owner@Example.com",
+        "display_name": "Olivia Owner",
+        "password": PW,
+        "confirm_password": PW,
+    }
     d.update(over)
     return d
 
@@ -37,8 +43,12 @@ def counts(engine):
 def test_form_shown_with_no_users(client):
     r = client.get("/setup")
     assert r.status_code == 200
-    for field in ("project_name", "email", "password", "confirm_password"):
+    for field in ("project_name", "email", "display_name", "password", "confirm_password"):
         assert f'name="{field}"' in r.text
+    field = re.search(r'<input[^>]*name="display_name"[^>]*>', r.text).group(0)
+    assert 'type="text"' in field and 'maxlength="50"' in field and " required" in field
+    # Name sits between Email and Password
+    assert r.text.index('name="email"') < r.text.index('name="display_name"') < r.text.index('name="password"')
 
 
 def test_success_creates_owner_and_project_and_signs_in(client, db_engine):
@@ -47,10 +57,11 @@ def test_success_creates_owner_and_project_and_signs_in(client, db_engine):
     with Session(db_engine) as s:
         users = s.scalars(select(User)).all()
         projects = s.scalars(select(Project)).all()
-    assert [(u.email, u.role) for u in users] == [("owner@example.com", "owner")]
+    assert [(u.email, u.role, u.display_name) for u in users] == [("owner@example.com", "owner", "Olivia Owner")]
     assert [(p.id, p.name) for p in projects] == [(1, "Team A")]
     home = client.get("/submit")
-    assert home.status_code == 200 and "owner@example.com" in home.text
+    assert home.status_code == 200 and "Signed in as Olivia Owner" in home.text
+    assert "owner@example.com" not in home.text
 
 
 def test_login_works_and_home_redirects_to_setup_without_users(client):
@@ -90,6 +101,13 @@ def test_setup_404_after_setup_and_nothing_changes(client, db_engine):
         ({"email": "   "}, "valid email"),
         ({"project_name": "   "}, "Project name is required"),
         ({"project_name": "x" * 101}, "at most 100"),
+        ({"display_name": ""}, "Enter a name"),
+        ({"display_name": "   "}, "Enter a name"),
+        ({"display_name": "x" * 51}, "Name must be at most 50 characters"),
+        ({"display_name": "Sam\nLee"}, "Name must be a single line"),
+        ({"display_name": "Sam\tLee"}, "Name must be a single line"),
+        ({"display_name": "Anonymous"}, "Choose a different name"),
+        ({"display_name": "  aNoNyMoUs "}, "Choose a different name"),
     ],
 )
 def test_invalid_input_reshows_form_and_creates_nothing(client, db_engine, over, message):
@@ -105,9 +123,102 @@ def test_error_keeps_email_and_project_name_but_not_password(client):
     r = client.post("/setup", data=data(password="weakpw", confirm_password="weakpw"))
     assert 'value="owner@example.com"' in r.text
     assert 'value="Team A"' in r.text
+    assert 'value="Olivia Owner"' in r.text
     assert "weakpw" not in r.text
     r = client.post("/setup", data=data(confirm_password="mismatch!!"))
     assert PW not in r.text and "mismatch!!" not in r.text
+
+
+def stored_names(engine):
+    with Session(engine) as s:
+        return s.scalars(select(User.display_name)).all()
+
+
+def test_display_name_is_trimmed_and_inner_spaces_kept(client, db_engine):
+    assert client.post("/setup", data=data(display_name="  Sam   Lee  ")).status_code == 303
+    assert stored_names(db_engine) == ["Sam   Lee"]
+    assert "Signed in as Sam   Lee" in client.get("/submit").text
+
+
+def test_display_name_of_50_accepted_51_rejected(client, db_engine):
+    r = client.post("/setup", data=data(display_name="x" * 51))
+    assert r.status_code == 400 and "Name must be at most 50 characters" in r.text
+    assert counts(db_engine) == (0, 0)
+    assert client.post("/setup", data=data(display_name=" " + "x" * 50 + " ")).status_code == 303
+    assert stored_names(db_engine) == ["x" * 50]
+
+
+def test_display_name_length_counts_characters_not_bytes(client, db_engine):
+    assert client.post("/setup", data=data(display_name="\U0001f600" * 50)).status_code == 303
+    assert stored_names(db_engine) == ["\U0001f600" * 50]
+
+
+def test_emoji_and_non_latin_display_name_kept_intact(client, db_engine):
+    assert client.post("/setup", data=data(display_name="Zoë 李雷 \U0001f600")).status_code == 303
+    assert stored_names(db_engine) == ["Zoë 李雷 \U0001f600"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["Sam\nLee", "Sam\rLee", "Sam\tLee", "Sam\x00Lee", "Sam\x1fLee", "Sam\x7fLee", "Sam\x85Lee",
+     "Sam\x9fLee", "Sam\u2028Lee", "Sam\u2029Lee", "Sam\r\nLee"],
+)
+def test_control_and_line_separator_characters_rejected(client, db_engine, name):
+    r = client.post("/setup", data=data(display_name=name))
+    assert r.status_code == 400 and "Name must be a single line" in r.text
+    assert counts(db_engine) == (0, 0)
+
+
+@pytest.mark.parametrize("name", ["\u200b", "\u200b\u200b", " \u200b ", "\u2060\ufeff", "\u00a0", "\u3000"])
+def test_invisible_only_names_are_empty(client, db_engine, name):
+    r = client.post("/setup", data=data(display_name=name))
+    assert r.status_code == 400 and "Enter a name" in r.text
+    assert counts(db_engine) == (0, 0)
+
+
+@pytest.mark.parametrize("name", ["anonymous", "ANONYMOUS", "Anonymous", "  AnonYmous\t", "Anon\u200bymous"])
+def test_anonymous_in_any_case_rejected(client, db_engine, name):
+    r = client.post("/setup", data=data(display_name=name))
+    assert r.status_code == 400 and "Choose a different name" in r.text
+    assert counts(db_engine) == (0, 0)
+
+
+def test_names_containing_anonymous_are_allowed(client, db_engine):
+    assert client.post("/setup", data=data(display_name="Anonymous Al")).status_code == 303
+
+
+def test_bad_name_keeps_form_values_escaped(client):
+    r = client.post("/setup", data=data(display_name="<b>x</b>" + "y" * 50))
+    assert r.status_code == 400 and "at most 50" in r.text
+    assert 'value="&lt;b&gt;x&lt;/b&gt;' in r.text and "<b>x</b>" not in r.text
+    r = client.post("/setup", data=data(display_name='"><i>q', confirm_password="different pass"))
+    assert "<i>q" not in r.text and 'value="&#34;&gt;&lt;i&gt;q"' in r.text
+    r = client.post("/setup", data=data(display_name="  Sam  ", confirm_password="different pass"))
+    assert 'value="Sam"' in r.text
+
+
+def test_name_error_comes_after_email_and_project_errors_but_before_password(client):
+    r = client.post("/setup", data=data(display_name="", email="nope", project_name=""))
+    assert "valid email" in r.text and "Enter a name" not in r.text
+    r = client.post("/setup", data=data(display_name="", project_name=""))
+    assert "Project name is required" in r.text and "Enter a name" not in r.text
+    r = client.post("/setup", data=data(display_name="", password="x", confirm_password="y"))
+    assert "Enter a name" in r.text and "do not match" not in r.text
+
+
+def test_missing_name_field_is_rejected(client, db_engine):
+    body = data()
+    del body["display_name"]
+    r = client.post("/setup", data=body)
+    assert r.status_code == 400 and "Enter a name" in r.text
+    assert counts(db_engine) == (0, 0)
+
+
+def test_login_still_uses_email_not_the_display_name(client, db_engine):
+    client.post("/setup", data=data(display_name="Olivia Owner"))
+    client.post("/logout")
+    assert client.post("/login", data={"email": "Olivia Owner", "password": PW}).status_code == 401
+    assert client.post("/login", data={"email": "owner@example.com", "password": PW}).status_code == 303
 
 
 def test_project_name_of_100_chars_accepted(client, db_engine):
@@ -176,7 +287,7 @@ def tok(db_engine):
 def test_token_field_shown_only_when_configured(tok, client):
     page = tok.get("/setup")
     assert page.status_code == 200
-    for field in ("project_name", "email", "password", "confirm_password"):
+    for field in ("project_name", "email", "display_name", "password", "confirm_password"):
         assert f'name="{field}"' in page.text
     m = TOKEN_INPUT.search(page.text)
     assert m and 'type="password"' in m.group(0) and 'autocomplete="off"' in m.group(0)
@@ -210,6 +321,7 @@ def test_missing_and_wrong_give_the_same_message(tok):
 def test_token_error_keeps_name_and_email_and_hides_secrets(tok):
     r = tok.post("/setup", data=data(setup_token=WRONG))
     assert 'value="owner@example.com"' in r.text and 'value="Team A"' in r.text
+    assert 'value="Olivia Owner"' in r.text
     assert WRONG not in r.text and TOKEN not in r.text and PW not in r.text
     assert "value=" not in TOKEN_INPUT.search(r.text).group(0)
 
@@ -234,7 +346,7 @@ def test_correct_token_creates_owner_and_signs_in(tok, db_engine):
     r = tok.post("/setup", data=data(setup_token=TOKEN))
     assert r.status_code == 303 and r.headers["location"] == "/"
     assert counts(db_engine) == (1, 1)
-    assert "owner@example.com" in tok.get("/submit").text
+    assert "Signed in as Olivia Owner" in tok.get("/submit").text
 
 
 @pytest.mark.parametrize("typed", [f" {TOKEN}", f"{TOKEN}\n", f"\t{TOKEN} \r\n"])
@@ -346,3 +458,14 @@ def test_setup_template_has_no_inline_script_or_style():
     path = Path(__file__).resolve().parent.parent / "app" / "templates" / "setup.html"
     html = path.read_text(encoding="utf-8")
     assert "<script" not in html and "<style" not in html and "style=" not in html and " onclick" not in html
+
+
+def test_bad_name_with_wrong_token_still_reports_the_token_first(tok, db_engine):
+    r = tok.post("/setup", data=data(setup_token=WRONG, display_name=""))
+    assert r.status_code == 400 and TOKEN_ERROR in r.text and "Enter a name" not in r.text
+
+
+def test_bad_name_with_correct_token_creates_nothing(tok, db_engine):
+    r = tok.post("/setup", data=data(setup_token=TOKEN, display_name="anonymous"))
+    assert r.status_code == 400 and "Choose a different name" in r.text
+    assert counts(db_engine) == (0, 0)

@@ -36,7 +36,7 @@ class Layout:
     """What templates/base.html shows: the project name and, when signed in, the user and nav."""
 
     project_name: str = DEFAULT_PROJECT_NAME
-    email: str | None = None
+    display_name: str | None = None
     links: tuple[tuple[str, str, bool], ...] = ()  # (label, href, is_current_page)
 
 
@@ -61,7 +61,7 @@ def build_layout(request: Request, public: bool = False) -> Layout:
         return Layout(project_name=name)
     path = request.url.path.rstrip("/") or "/"
     links = OWNER_LINKS if user.role == "owner" else MEMBER_LINKS
-    return Layout(name, user.email, tuple((label, href, href == path) for label, href in links))
+    return Layout(name, user.display_name, tuple((label, href, href == path) for label, href in links))
 
 
 def layout_context(request: Request) -> dict:

@@ -14,7 +14,7 @@
     {% if items %}
     <ul>
       {% for item in items %}
-      <li>{{ item.text }} <span class="author">{% if item.email is defined %}{{ item.email }}{% else %}Anonymous{% endif %}</span></li>
+      <li>{{ item.text }} <span class="author">{% if item.display_name is defined %}{{ item.display_name }}{% else %}Anonymous{% endif %}</span></li>
       {% endfor %}
     </ul>
     {% else %}

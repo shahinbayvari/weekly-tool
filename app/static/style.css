@@ -138,6 +138,11 @@ code { display: block; padding: 0.5rem; background: var(--header-bg); word-break
 
 .author, .anonymous-state, .deadline { color: var(--muted); }
 
+.author, .person { overflow-wrap: anywhere; word-break: break-word; }
+
+.account { min-width: 0; max-width: 100%; }
+.account > span { min-width: 0; max-width: 100%; }
+
 .hidden-until { color: var(--muted); }
 
 section { margin-bottom: 1rem; }

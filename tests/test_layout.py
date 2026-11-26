@@ -42,8 +42,8 @@ def clock():
 @pytest.fixture
 def users(db_engine):
     return {
-        "owner": create_user("olga@example.com", PW, "owner", engine=db_engine),
-        "member": create_user("mia@example.com", PW, "member", engine=db_engine),
+        "owner": create_user("olga@example.com", PW, "owner", display_name="Olga Owner", engine=db_engine),
+        "member": create_user("mia@example.com", PW, "member", display_name="Mia Member", engine=db_engine),
     }
 
 
@@ -161,11 +161,13 @@ def test_landmarks_language_viewport_and_one_stylesheet(db_engine, users):
 # --- header ----------------------------------------------------------------------
 
 
-def test_header_shows_project_email_and_logout_form_with_token(db_engine, users):
+def test_header_shows_project_own_name_and_logout_form_with_token(db_engine, users):
     set_project(db_engine, "Team Rocket")
     with signed_in("mia@example.com") as c:
         header = HEADER.search(c.get("/submit").text).group(0)
-        assert "Team Rocket" in header and "mia@example.com" in header
+        assert "Team Rocket" in header and "Signed in as Mia Member" in header
+        assert "mia@example.com" not in header and "@" not in header
+        assert "Olga Owner" not in header
         form = re.search(r'<form method="post" action="/logout">.*?</form>', header, re.S).group(0)
         assert re.search(r'name="csrf_token" value="([^"]+)"', form).group(1) == c.csrf_token()
         assert "Log out" in form and "<button" in form
@@ -186,10 +188,10 @@ def test_default_project_name_when_none_exists(db_engine, users):
         assert "Weekly Feedback" in HEADER.search(c.get("/submit").text).group(0)
 
 
-def test_project_name_and_email_are_escaped(db_engine):
+def test_project_name_and_display_name_are_escaped(db_engine):
     set_project(db_engine, "<b>x</b>")
-    email = "e<i>y</i>@example.com"
-    create_user(email, PW, "owner", engine=db_engine)
+    email = "e@example.com"
+    create_user(email, PW, "owner", display_name="e<i>y</i>", engine=db_engine)
     with CsrfClient(app, follow_redirects=False) as c:
         c.post("/login", data={"email": email, "password": PW})
         html = c.get("/submit").text
@@ -203,7 +205,8 @@ def test_reveal_header_has_nothing_about_the_current_week(db_engine, users):
     with signed_in("olga@example.com") as c:
         header = HEADER.search(c.get("/reveal").text).group(0)
     assert not re.search(r"\d{4}-\d{2}-\d{2}|Week of|Nov|submitted", header)
-    assert header.count("@") == 1  # only the viewer's own email
+    assert header.count("@") == 0  # the header shows the viewer's name, never an email
+    assert "Signed in as Olga Owner" in header
 
 
 # --- signed-out pages ---------------------------------------------------------------
@@ -343,3 +346,16 @@ def test_error_pages_have_no_inline_styles_or_scripts(db_engine, users):
     with signed_in("mia@example.com") as c:
         for path in ("/invites", "/nope"):
             assert inline_problems(c.get(path, headers=HTML).text) == []
+
+
+def test_header_shows_each_viewers_own_name_and_never_an_email(db_engine, users):
+    for email, mine, other in (
+        ("olga@example.com", "Olga Owner", "Mia Member"),
+        ("mia@example.com", "Mia Member", "Olga Owner"),
+    ):
+        with signed_in(email) as c:
+            for path in PAGES[:2] if email.startswith("mia") else PAGES:
+                header = HEADER.search(c.get(path).text).group(0)
+                assert f"Signed in as {mine}" in header
+                assert other not in header and "@" not in header
+                assert "olga" not in header.lower().replace("olga owner", "")

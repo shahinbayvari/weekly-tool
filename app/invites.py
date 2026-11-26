@@ -18,7 +18,7 @@ from app.access import require_owner
 from app.auth import SESSION_KEY, get_engine, get_optional_user, templates
 from app.models import Invite, User
 from app.passwords import WeakPasswordError, hash_password
-from app.users import InvalidEmailError, normalise_email, validate_email
+from app.users import InvalidDisplayNameError, InvalidEmailError, normalise_email, validate_display_name, validate_email
 
 router = APIRouter()
 
@@ -124,8 +124,8 @@ def _open_invite_email(engine: Engine, token: str) -> str | None:
         return invite.email
 
 
-def _accept_form(request: Request, token: str, email: str, error: str | None = None):
-    context = {"token": token, "email": email, "error": error}
+def _accept_form(request: Request, token: str, email: str, error: str | None = None, display_name: str = ""):
+    context = {"token": token, "email": email, "display_name": display_name, "error": error}
     return templates.TemplateResponse(request, "accept_invite.html", context, status_code=400 if error else 200)
 
 
@@ -148,6 +148,7 @@ def accept_invite_form(
 def accept_invite(
     request: Request,
     token: str,
+    display_name: str = Form(""),
     password: str = Form(""),
     confirm_password: str = Form(""),
     user: User | None = Depends(get_optional_user),
@@ -159,15 +160,20 @@ def accept_invite(
     if email is None:
         return _not_valid(request)
     error = None
-    password_hash = None
     try:
-        password_hash = hash_password(password)
-    except WeakPasswordError as exc:
+        display_name = validate_display_name(display_name)
+    except InvalidDisplayNameError as exc:
         error = str(exc)
+    password_hash = None
+    if error is None:
+        try:
+            password_hash = hash_password(password)
+        except WeakPasswordError as exc:
+            error = str(exc)
     if error is None and password != confirm_password:
         error = "Passwords do not match"
     if error:
-        return _accept_form(request, token, email, error)
+        return _accept_form(request, token, email, error, display_name.strip())
 
     # One write transaction: BEGIN IMMEDIATE takes the SQLite write lock before the
     # re-check, so of several concurrent submissions only one still sees the invite open.
@@ -184,7 +190,7 @@ def accept_invite(
                 conn.rollback()
                 return _not_valid(request)
             user_id = conn.execute(
-                insert(User).values(email=invite_email, password_hash=password_hash, role="member")
+                insert(User).values(email=invite_email, password_hash=password_hash, role="member", display_name=display_name)
             ).inserted_primary_key[0]
             conn.execute(
                 update(Invite).where(Invite.token_hash == token_hash).values(accepted_at=func.current_timestamp())

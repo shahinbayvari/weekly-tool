@@ -41,13 +41,13 @@ def test_login_success_redirects_and_signs_in(client, ann):
     r = login(client)
     assert r.status_code == 303 and r.headers["location"] == "/"
     home = client.get("/submit")
-    assert home.status_code == 200 and "ann@example.com" in home.text
+    assert home.status_code == 200 and "Signed in as ann" in home.text and "ann@example.com" not in home.text
 
 
 def test_email_trimmed_and_lowercased(client, ann):
     r = login(client, email="  Ann@Example.com")
     assert r.status_code == 303
-    assert "ann@example.com" in client.get("/submit").text
+    assert "Signed in as ann" in client.get("/submit").text
 
 
 def test_wrong_password_and_unknown_email_identical(client, ann):

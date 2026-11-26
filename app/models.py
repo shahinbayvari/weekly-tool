@@ -31,6 +31,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String)
     role: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = _now()
+    display_name: Mapped[str] = mapped_column(String)  # chosen at sign-up (#29); no default, see app.users
 
 
 class Project(Base):

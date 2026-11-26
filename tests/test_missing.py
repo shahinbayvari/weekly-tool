@@ -179,4 +179,4 @@ def test_page_shows_no_counts_or_item_data(db_engine, users, clock):
     assert "secret text" not in html and "named text" not in html
     assert "anonymous" not in html.lower()
     assert "data-" not in html
-    assert "owner@example.com" in html
+    assert "Signed in as owner" in html  # the header shows the viewer, by display name

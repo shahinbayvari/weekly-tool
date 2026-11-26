@@ -5,13 +5,13 @@ identifier must be a real ``YYYY-MM-DD`` date that falls on the configured open
 day; anything else raises ValueError.
 
 Anonymity is enforced by construction: named items are read with a join to the
-users table (for the email); anonymous items are read by a separate query that
+users table (for the display name, never the email); anonymous items are read by a separate query that
 selects only text and category, so no author data is ever loaded for them. The
 two lists are then merged and sorted in Python by (text case-insensitively, text
-exactly, anonymous-before-named, email), which never uses author, id or time, so
+exactly, anonymous-before-named, display name), which never uses author, id or time, so
 a member's anonymous items are not next to their named ones. Among identical
 texts every anonymous item comes before every named one (a fixed rule, not tied
-to any author); named duplicates are ordered by the email shown on them.
+to any author); named duplicates are ordered by the name shown on them.
 """
 
 import re
@@ -33,7 +33,7 @@ _WEEK_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 class NamedItem:
     text: str
     category: str
-    email: str
+    display_name: str
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ def _parse_week(week: str, schedule: Schedule) -> date:
 
 def _sort_key(item: NamedItem | AnonymousItem) -> tuple:
     named = isinstance(item, NamedItem)
-    return (item.text.casefold(), item.text, named, item.email if named else "")
+    return (item.text.casefold(), item.text, named, item.display_name if named else "")
 
 
 def reveal_week(
@@ -101,7 +101,7 @@ def reveal_week(
     try:
         with Session(engine) as session:
             named = session.execute(
-                select(FeedbackItem.text, FeedbackItem.category, User.email)
+                select(FeedbackItem.text, FeedbackItem.category, User.display_name)
                 .join(User, User.id == FeedbackItem.author_id)
                 .where(FeedbackItem.week == week, FeedbackItem.anonymous.is_(False))
             ).all()
