@@ -14,6 +14,8 @@ DEV_SECRET_KEY = "dev-only-insecure-secret-key"  # development only
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 ENVIRONMENTS = ("development", "production")
 EMAIL_BACKENDS = tuple(BACKENDS)  # single source of truth: app.email.BACKENDS
+SETUP_TOKEN_MIN = 16
+SETUP_TOKEN_MAX = 256
 _TIME_RE = re.compile(r"([01]\d|2[0-3]):([0-5]\d)")
 
 
@@ -37,6 +39,7 @@ class Settings:
     reminder_interval_minutes: int = 5
     scheduler_enabled: bool = True
     cookie_secure: bool = False
+    setup_token: str = field(default="", repr=False)
 
 
 def _day(name: str, value: str) -> str:
@@ -94,6 +97,18 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     if app_env == "production" and secret_key == DEV_SECRET_KEY:
         raise ConfigError("WEEKLY_SECRET_KEY: the default development key is not allowed in production")
 
+    # Never put the token value in an error message.
+    setup_token = get("WEEKLY_SETUP_TOKEN", defaults.setup_token)
+    if not setup_token:
+        if app_env == "production":
+            raise ConfigError("WEEKLY_SETUP_TOKEN: must be set in production")
+    elif any(ch.isspace() for ch in setup_token):
+        raise ConfigError("WEEKLY_SETUP_TOKEN: must not contain whitespace")
+    elif not SETUP_TOKEN_MIN <= len(setup_token) <= SETUP_TOKEN_MAX:
+        raise ConfigError(
+            f"WEEKLY_SETUP_TOKEN: must be {SETUP_TOKEN_MIN} to {SETUP_TOKEN_MAX} characters long"
+        )
+
     email_backend = get("WEEKLY_EMAIL_BACKEND", defaults.email_backend)
     if email_backend not in EMAIL_BACKENDS:
         raise ConfigError(
@@ -141,4 +156,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         reminder_interval_minutes=int(interval_raw),
         scheduler_enabled=enabled_raw == "true",
         cookie_secure=secure_raw == "true",
+        setup_token=setup_token,
     )

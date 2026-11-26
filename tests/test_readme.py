@@ -26,6 +26,7 @@ FIELD_TO_VAR = {
     "reminder_interval_minutes": "WEEKLY_REMINDER_INTERVAL_MINUTES",
     "scheduler_enabled": "WEEKLY_SCHEDULER_ENABLED",
     "cookie_secure": "WEEKLY_COOKIE_SECURE",
+    "setup_token": "WEEKLY_SETUP_TOKEN",
 }
 
 
@@ -67,7 +68,8 @@ def test_table_defaults_match_code():
     for field, var in FIELD_TO_VAR.items():
         value = getattr(defaults, field)
         expected = str(value).lower() if isinstance(value, bool) else str(value)
-        assert table[var][0] == f"`{expected}`", f"{var}: README default {table[var][0]} != {expected}"
+        shown = "none" if value == "" else f"`{expected}`"  # an unset-by-default setting reads "none"
+        assert table[var][0] == shown, f"{var}: README default {table[var][0]} != {shown}"
 
 
 def test_table_rows_are_complete():

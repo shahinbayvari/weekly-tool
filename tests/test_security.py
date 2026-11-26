@@ -434,7 +434,7 @@ def test_secure_flag_follows_setting(db_engine, secure):
 def test_production_env_alone_does_not_set_secure():
     from app.config import load_settings
 
-    s = load_settings({"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": "k", "WEEKLY_COOKIE_SECURE": "true"})
+    s = load_settings({"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": "k", "WEEKLY_COOKIE_SECURE": "true", "WEEKLY_SETUP_TOKEN": "x" * 16})
     assert s.cookie_secure is True
     with TestClient(make_mini_app(s.cookie_secure), base_url="https://testserver") as c:
         assert "secure" in cookie_header(c.get("/login")).replace("samesite", "")

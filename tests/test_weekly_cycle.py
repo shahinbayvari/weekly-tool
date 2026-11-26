@@ -20,6 +20,7 @@ from tests.conftest import CsrfClient, strip_csrf
 from tests.fakes import FakeEmailSender
 
 AMS = ZoneInfo("Europe/Amsterdam")
+SETUP_TOKEN = "weekly-setup-token-1234"
 SETTINGS = Settings(
     timezone="Europe/Amsterdam",
     open_day="monday",
@@ -27,6 +28,7 @@ SETTINGS = Settings(
     close_day="friday",
     close_time="17:00",
     reminder_hours_before=24,
+    setup_token=SETUP_TOKEN,
 )
 OWNER = "owner@example.com"
 ANN = "ann@example.com"
@@ -117,7 +119,8 @@ def walk(owner, ann, clock, fake, engine):
     # 1. Setup: the owner is created and signed in.
     r = owner.post(
         "/setup",
-        data={"project_name": "Team", "email": OWNER, "password": PASSWORD, "confirm_password": PASSWORD},
+        data={"project_name": "Team", "email": OWNER, "password": PASSWORD, "confirm_password": PASSWORD,
+              "setup_token": SETUP_TOKEN},
     )
     assert r.status_code == 303
     page = owner.get("/submit")

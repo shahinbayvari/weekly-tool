@@ -6,6 +6,8 @@ import pytest
 
 from app.config import DEV_SECRET_KEY, ConfigError, Settings, load_settings
 
+GOOD_TOKEN = "a-good-setup-token-1234"
+
 
 def test_defaults_with_empty_environment():
     s = load_settings({})
@@ -89,17 +91,17 @@ def test_empty_secret_rejected():
 
 def test_production_rejects_default_secret():
     with pytest.raises(ConfigError, match="WEEKLY_SECRET_KEY") as exc:
-        load_settings({"WEEKLY_ENV": "production"})
+        load_settings({"WEEKLY_ENV": "production", "WEEKLY_SETUP_TOKEN": GOOD_TOKEN})
     assert DEV_SECRET_KEY not in str(exc.value)
 
 
 def test_production_rejects_explicit_default_secret():
     with pytest.raises(ConfigError, match="WEEKLY_SECRET_KEY"):
-        load_settings({"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": DEV_SECRET_KEY})
+        load_settings({"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": DEV_SECRET_KEY, "WEEKLY_SETUP_TOKEN": GOOD_TOKEN})
 
 
 def test_production_with_real_secret_ok():
-    s = load_settings({"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": "s3cret"})
+    s = load_settings({"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": "s3cret", "WEEKLY_SETUP_TOKEN": GOOD_TOKEN})
     assert s.env == "production"
 
 
@@ -225,4 +227,53 @@ def test_cookie_secure_rejected(bad):
 
 
 def test_production_does_not_imply_secure_cookie():
-    assert load_settings({"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": "s3cret"}).cookie_secure is False
+    assert load_settings({"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": "s3cret", "WEEKLY_SETUP_TOKEN": GOOD_TOKEN}).cookie_secure is False
+
+
+# --- WEEKLY_SETUP_TOKEN -------------------------------------------------------
+
+
+@pytest.mark.parametrize("raw", [None, ""])
+def test_setup_token_unset_or_empty_means_no_token_in_development(raw):
+    env = {} if raw is None else {"WEEKLY_SETUP_TOKEN": raw}
+    assert load_settings(env).setup_token == ""
+
+
+@pytest.mark.parametrize("raw", [None, ""])
+def test_production_without_token_refused(raw):
+    env = {"WEEKLY_ENV": "production", "WEEKLY_SECRET_KEY": "s3cret"}
+    if raw is not None:
+        env["WEEKLY_SETUP_TOKEN"] = raw
+    with pytest.raises(ConfigError, match="WEEKLY_SETUP_TOKEN"):
+        load_settings(env)
+
+
+@pytest.mark.parametrize("env_name", ["development", "production"])
+@pytest.mark.parametrize(
+    "token",
+    ["short-token-15c", "x" * 257, "has a-space-in-it-1234", "tab\there-1234567890", "new\nline-1234567890", "x" * 20 + " "],
+)
+def test_bad_token_refused_in_every_environment_without_leaking(env_name, token):
+    env = {"WEEKLY_ENV": env_name, "WEEKLY_SECRET_KEY": "s3cret", "WEEKLY_SETUP_TOKEN": token}
+    with pytest.raises(ConfigError, match="WEEKLY_SETUP_TOKEN") as exc:
+        load_settings(env)
+    assert token not in str(exc.value) and repr(token) not in str(exc.value)
+
+
+@pytest.mark.parametrize("n", [16, 256])
+def test_token_length_boundaries_accepted(n):
+    assert load_settings({"WEEKLY_SETUP_TOKEN": "t" * n}).setup_token == "t" * n
+
+
+def test_token_of_15_characters_refused():
+    with pytest.raises(ConfigError, match="WEEKLY_SETUP_TOKEN"):
+        load_settings({"WEEKLY_SETUP_TOKEN": "t" * 15})
+
+
+def test_configured_token_is_kept_in_development():
+    s = load_settings({"WEEKLY_SETUP_TOKEN": GOOD_TOKEN})
+    assert s.env == "development" and s.setup_token == GOOD_TOKEN
+
+
+def test_token_not_in_repr():
+    assert GOOD_TOKEN not in repr(load_settings({"WEEKLY_SETUP_TOKEN": GOOD_TOKEN}))

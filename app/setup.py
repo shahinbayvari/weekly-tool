@@ -1,12 +1,16 @@
 """One-time owner setup: creates the owner user and the single project while no users exist."""
 
+import hmac
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import Engine, exists, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from app.auth import SESSION_KEY, get_engine, templates
+from app.config import Settings
 from app.models import Project, User
+from app.pages.submit import get_settings
 from app.passwords import WeakPasswordError, hash_password
 from app.users import InvalidEmailError, normalise_email, validate_email
 
@@ -25,18 +29,23 @@ def require_setup_open(engine: Engine = Depends(get_engine)) -> None:
         raise HTTPException(status_code=404)
 
 
-def _form(request: Request, project_name: str, email: str, error: str | None = None):
+def token_matches(submitted: str, configured: str) -> bool:
+    """Constant-time check on UTF-8 bytes. Surrounding whitespace (as pasted) is ignored."""
+    return hmac.compare_digest(submitted.strip().encode("utf-8"), configured.encode("utf-8"))
+
+
+def _form(request: Request, project_name: str, email: str, error: str | None = None, token_required: bool = False):
     return templates.TemplateResponse(
         request,
         "setup.html",
-        {"project_name": project_name, "email": email, "error": error},
+        {"project_name": project_name, "email": email, "error": error, "token_required": token_required},
         status_code=400 if error else 200,
     )
 
 
 @router.get("/setup", dependencies=[Depends(require_setup_open)])
-def setup_form(request: Request):
-    return _form(request, "", "")
+def setup_form(request: Request, settings: Settings = Depends(get_settings)):
+    return _form(request, "", "", token_required=bool(settings.setup_token))
 
 
 @router.post("/setup", dependencies=[Depends(require_setup_open)])
@@ -46,8 +55,13 @@ def setup(
     email: str = Form(""),
     password: str = Form(""),
     confirm_password: str = Form(""),
+    setup_token: str = Form(""),
     engine: Engine = Depends(get_engine),
+    settings: Settings = Depends(get_settings),
 ):
+    token_required = bool(settings.setup_token)
+    if token_required and not token_matches(setup_token, settings.setup_token):
+        return _form(request, project_name.strip(), normalise_email(email), "Setup token is incorrect", True)
     name = project_name.strip()
     normalised = normalise_email(email)
     error = None
@@ -68,7 +82,7 @@ def setup(
     if error is None and password != confirm_password:
         error = "Passwords do not match"
     if error:
-        return _form(request, name, normalised, error)
+        return _form(request, name, normalised, error, token_required)
 
     # One write transaction: BEGIN IMMEDIATE takes the SQLite write lock before the
     # "no users yet" re-check, so only one of several concurrent submissions passes it.

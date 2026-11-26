@@ -61,7 +61,7 @@ The app does not create or migrate the database itself (the seed command does, s
 
 ## First run
 
-1. Open http://127.0.0.1:8000/setup and create the owner account. This page only works until the first user exists.
+1. Set `WEEKLY_SETUP_TOKEN` (see the table below) before starting the server, then open http://127.0.0.1:8000/setup, enter the token in the "Setup token" field and create the owner account. In development the token can be left unset and the field is not shown; in production it is required. This page only works until the first user exists.
 2. Sign in at `/login`, then open `/invites` and invite members by email. The invite link is shown on screen, once: copy it and send it to the member. The member opens the link and chooses a password.
 3. Members add items at `/submit` and read the revealed results at `/reveal` after the deadline. The owner sees who has not submitted at `/missing`.
 
@@ -98,6 +98,7 @@ export WEEKLY_TIMEZONE=Europe/Berlin
 | `WEEKLY_BASE_URL` | `http://127.0.0.1:8000` | `https://weekly.example.com` | Public address of the app, used for links in emails. Must start with http:// or https://. |
 | `WEEKLY_REMINDER_INTERVAL_MINUTES` | `5` | `10` | How often the in-app scheduler runs the reminder job (positive whole number). |
 | `WEEKLY_SCHEDULER_ENABLED` | `true` | `false` | `true` or `false`. Whether the web server runs the reminder job on a schedule. |
+| `WEEKLY_SETUP_TOKEN` | none | `a-random-string-of-20-or-more-chars` | Secret that must be entered on `/setup` to create the owner account, so only whoever controls the server can claim it. 16 to 256 characters, no whitespace. Required in production, optional in development (if set, it is enforced in any environment). |
 | `WEEKLY_COOKIE_SECURE` | `false` | `true` | `true` or `false`. Marks cookies Secure so they are only sent over https. Default is false so local http works. |
 
 ## Email and reminders
@@ -124,7 +125,7 @@ A reminder is recorded only after the email was sent. Runs that do not overlap n
 uv run python -m app.seed
 ```
 
-This creates a "Demo Project", the owner `owner@example.com` and members `member1@example.com` to `member5@example.com`, with sample items. All six use the password `demo-password`. That password is public: use the seed for local demos only.
+This creates a "Demo Project", the owner `owner@example.com` and members `member1@example.com` to `member5@example.com`, with sample items. All six use the password `demo-password`. That password is public: use the seed for local demos only. The seed writes users directly and does not need `WEEKLY_SETUP_TOKEN`.
 
 - `--week YYYY-MM-DD` fills a specific week instead of the current one. The date must be a day on which the window opens, for example a Monday.
 - It applies the database migrations itself.
@@ -141,6 +142,7 @@ Not a full deployment guide, only what to change before real use:
 - Email: only the `console` backend exists today. A real email backend would be selected through `WEEKLY_EMAIL_BACKEND`.
 - Scheduler: set `WEEKLY_SCHEDULER_ENABLED=false` and call `python -m app.reminders` from cron (see the scheduler limit above).
 - Secrets: set a real `WEEKLY_SECRET_KEY` and `WEEKLY_ENV=production`. Production refuses the default development key.
+- Setup token: set `WEEKLY_SETUP_TOKEN` to a long random string (16 to 256 characters, no whitespace) and enter it on `/setup`. Production refuses to start without it.
 - https: set `WEEKLY_COOKIE_SECURE=true` when serving over https. `WEEKLY_ENV=production` does not turn on Secure cookies by itself.
 - Set `WEEKLY_BASE_URL` to the public address so links in emails are correct.
 

@@ -185,6 +185,7 @@ def test_invalid_week_leaves_existing_db_untouched(env):
 def test_production_refuses_even_on_empty_db(env, monkeypatch, capsys):
     monkeypatch.setenv("WEEKLY_ENV", "production")
     monkeypatch.setenv("WEEKLY_SECRET_KEY", "a-real-secret")
+    monkeypatch.setenv("WEEKLY_SETUP_TOKEN", "a" * 16)
     assert main(["--week", WEEK]) == 1
     assert "production" in capsys.readouterr().err
     assert not env.exists()
@@ -260,7 +261,7 @@ def test_cli_exit_codes(tmp_path):
     bad = run_cli(db, "--week", "2026-1-1")
     assert bad.returncode != 0 and "Invalid --week" in bad.stderr and not db.exists()
 
-    prod = run_cli(db, "--week", WEEK, WEEKLY_ENV="production", WEEKLY_SECRET_KEY="a-real-secret")
+    prod = run_cli(db, "--week", WEEK, WEEKLY_ENV="production", WEEKLY_SECRET_KEY="a-real-secret", WEEKLY_SETUP_TOKEN="a" * 16)
     assert prod.returncode != 0 and "production" in prod.stderr and not db.exists()
 
     first = run_cli(db, "--week", WEEK)
