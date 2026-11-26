@@ -38,6 +38,9 @@ def calls(monkeypatch):
         def hash(self, *args, **kwargs):
             return real.hash(*args, **kwargs)
 
+        def check_needs_rehash(self, password_hash):
+            return real.check_needs_rehash(password_hash)
+
     monkeypatch.setattr(passwords, "_hasher", Spy())
     return seen
 

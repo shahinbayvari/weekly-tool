@@ -69,3 +69,46 @@ def test_exception_message_has_no_password():
     with pytest.raises(WeakPasswordError) as e:
         hash_password("secret")
     assert "secret" not in str(e.value)
+
+
+# --- needs_rehash ---------------------------------------------------------------
+from argon2 import PasswordHasher, Type  # noqa: E402
+
+from app.passwords import hash_existing_password, needs_rehash  # noqa: E402
+
+
+def test_current_hash_does_not_need_rehash():
+    assert needs_rehash(hash_password("password123")) is False
+
+
+@pytest.mark.parametrize(
+    "hasher",
+    [PasswordHasher(time_cost=1, memory_cost=8, parallelism=1), PasswordHasher(type=Type.I), PasswordHasher(type=Type.D)],
+    ids=["old-params", "argon2i", "argon2d"],
+)
+def test_old_parameters_or_variant_need_rehash(hasher):
+    assert needs_rehash(hasher.hash("password123")) is True
+
+
+def test_malformed_hashes_do_not_need_rehash_and_do_not_raise():
+    truncated = hash_password("password123")[:30]
+    for bad in ("", "not-a-hash", truncated, "$argon2id$", "$argon2id$v=19$m=8,t=1,p=1$"):
+        assert needs_rehash(bad) is False
+
+
+def test_hash_existing_password_skips_length_rules():
+    h = hash_existing_password("abc")
+    assert verify_password("abc", h) is True and needs_rehash(h) is False
+    with pytest.raises(WeakPasswordError):
+        hash_password("abc")
+
+
+def test_parameters_stated_only_in_passwords_module():
+    from pathlib import Path
+
+    hits = [
+        p.name
+        for p in Path(passwords.__file__).parent.rglob("*.py")
+        if any(w in p.read_text(encoding="utf-8") for w in ("time_cost", "memory_cost", "parallelism"))
+    ]
+    assert hits == ["passwords.py"]

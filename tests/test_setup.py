@@ -139,3 +139,11 @@ def test_concurrent_submissions_exactly_one_wins(db_engine):
     assert counts(db_engine) == (1, 1)
     with Session(db_engine) as s:
         assert [u.role for u in s.scalars(select(User))] == ["owner"]
+
+
+def test_setup_creates_a_current_hash(client, db_engine):
+    from app.passwords import needs_rehash
+
+    client.post("/setup", data=data())
+    with Session(db_engine) as s:
+        assert needs_rehash(s.scalar(select(User.password_hash))) is False

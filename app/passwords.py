@@ -1,4 +1,4 @@
-"""Password hashing, verification and length rules (argon2-cffi, default parameters)."""
+"""Password hashing, verification and length rules (argon2-cffi)."""
 
 import secrets
 
@@ -8,7 +8,9 @@ from argon2.exceptions import InvalidHashError, VerificationError
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
 
-_hasher = PasswordHasher()
+# The current hashing parameters live here and nowhere else. They equal the argon2-cffi defaults
+# (argon2-cffi 25.1.0) and are stated explicitly so a change is a one-line edit.
+_hasher = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 
 # Hash of a random secret that is thrown away: no password can match it. Made once, with the
 # same hasher as real hashes, so verifying against it costs the same as a real verification.
@@ -31,6 +33,20 @@ def hash_password(password: str) -> str:
     """Validate the password, then return a salted argon2 hash of it."""
     validate_password(password)
     return _hasher.hash(password)
+
+
+def hash_existing_password(password: str) -> str:
+    """Hash with the current parameters WITHOUT the length rules (for rehashing a verified password)."""
+    return _hasher.hash(password)
+
+
+def needs_rehash(password_hash: str) -> bool:
+    """True if the hash was made with other parameters or another argon2 variant than the current
+    ones. Empty or malformed hashes give False, never an error."""
+    try:
+        return bool(_hasher.check_needs_rehash(password_hash))
+    except (VerificationError, InvalidHashError, ValueError, TypeError):
+        return False
 
 
 def verify_password(password: str, password_hash: str) -> bool:

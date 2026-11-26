@@ -1,6 +1,6 @@
 """Create and look up users. Service layer only; no web routes."""
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -70,3 +70,15 @@ def find_user_by_email(email: str, *, engine: Engine | None = None) -> User | No
     finally:
         if own_engine:
             engine.dispose()
+
+
+def update_password_hash_if_unchanged(user_id: int, old_hash: str, new_hash: str, *, engine: Engine) -> bool:
+    """Compare-and-set: store `new_hash` only if the stored hash is still `old_hash`.
+
+    Returns True if a row was updated, False if the hash had changed meanwhile (nothing written).
+    """
+    with engine.begin() as conn:
+        result = conn.execute(
+            update(User).where(User.id == user_id, User.password_hash == old_hash).values(password_hash=new_hash)
+        )
+    return result.rowcount == 1

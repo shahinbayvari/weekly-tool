@@ -19,9 +19,9 @@ from sqlalchemy.orm import Session
 
 from app.db import make_engine
 from app.models import Project, User
-from app.passwords import verify_password, verify_unknown_user
+from app.passwords import hash_existing_password, needs_rehash, verify_password, verify_unknown_user
 from app.security import csrf_context
-from app.users import find_user_by_email
+from app.users import find_user_by_email, update_password_hash_if_unchanged
 
 logger = logging.getLogger("app.auth")
 SESSION_KEY = "user_id"
@@ -134,6 +134,20 @@ def login_form(request: Request, next: str = "", user: User | None = Depends(get
     return _form(request, "", safe_next(next))
 
 
+def _rehash_if_needed(user: User, password: str, engine: Engine) -> None:
+    """After a successful verification: replace an outdated hash by one with the current parameters.
+
+    Never breaks the login: any failure is logged (user id only, no password or hash) and ignored.
+    """
+    try:
+        if not needs_rehash(user.password_hash):
+            return
+        new_hash = hash_existing_password(password)
+        update_password_hash_if_unchanged(user.id, user.password_hash, new_hash, engine=engine)
+    except Exception:  # noqa: BLE001 - a rehash problem must never fail the login
+        logger.warning("could not rehash the password of user %s", user.id)
+
+
 @router.post("/login")
 def login(
     request: Request,
@@ -154,6 +168,7 @@ def login(
         return _form(request, email, next_url, status_code=401)
     if not verify_password(password, user.password_hash):
         return _form(request, email, next_url, status_code=401)
+    _rehash_if_needed(user, password, engine)
     request.session.clear()
     request.session[SESSION_KEY] = user.id
     return RedirectResponse(next_url, status_code=303)

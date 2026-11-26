@@ -197,3 +197,143 @@ def test_landing_redirects_signed_in_user_to_submit(client, ann):
     login(client)
     r = client.get("/")
     assert r.status_code == 303 and r.headers["location"] == "/submit"
+
+
+# --- rehash on login (#27) ----------------------------------------------------------
+import logging  # noqa: E402
+
+import argon2  # noqa: E402
+from argon2 import PasswordHasher, Type  # noqa: E402
+from sqlalchemy.exc import SQLAlchemyError  # noqa: E402
+
+import app.auth as auth_module  # noqa: E402
+import app.passwords as passwords_module  # noqa: E402
+from app.passwords import needs_rehash, verify_password  # noqa: E402
+
+OLD = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
+
+
+def stored(engine, email="ann@example.com"):
+    with engine.connect() as c:
+        return c.execute(text("SELECT password_hash FROM users WHERE email = :e"), {"e": email}).scalar_one()
+
+
+def set_hash(engine, value, email="ann@example.com"):
+    with engine.begin() as c:
+        c.execute(text("UPDATE users SET password_hash = :h WHERE email = :e"), {"h": value, "e": email})
+
+
+def current_params():
+    return argon2.extract_parameters(passwords_module.hash_password("password123"))
+
+
+def no_leak(engine, caplog, password, *hashes):
+    with engine.connect() as c:
+        row = " ".join(str(v) for r in c.execute(text("SELECT * FROM users")) for v in r)
+    assert password not in row and password not in caplog.text
+    for h in hashes:
+        assert h not in caplog.text
+
+
+@pytest.mark.parametrize("hasher", [OLD, PasswordHasher(type=Type.I)], ids=["old-params", "argon2i"])
+def test_login_rehashes_outdated_hash(client, ann, db_engine, caplog, hasher):
+    old = hasher.hash("password123")
+    set_hash(db_engine, old)
+    r = login(client, password="password123", next="/submit")
+    assert r.status_code == 303 and r.headers["location"] == "/submit"
+    assert client.get("/submit").status_code == 200
+    new = stored(db_engine)
+    assert new != old and needs_rehash(new) is False
+    assert argon2.extract_parameters(new) == current_params()
+    assert argon2.extract_parameters(new).type == Type.ID
+    assert verify_password("password123", new) is True
+    no_leak(db_engine, caplog, "password123", old, new)
+
+
+def test_current_hash_is_left_alone(client, ann, db_engine):
+    before = stored(db_engine)
+    assert login(client).status_code == 303
+    assert stored(db_engine) == before
+
+
+def test_failed_logins_leave_hash_alone(client, ann, db_engine):
+    old = OLD.hash("password123")
+    set_hash(db_engine, old)
+    assert login(client, password="wrong password").status_code == 401
+    assert login(client, email="nobody@example.com", password="password123").status_code == 401
+    assert login(client, password="").status_code == 401
+    assert stored(db_engine) == old
+
+
+def test_malformed_stored_hash_is_401_and_unchanged(client, ann, db_engine):
+    set_hash(db_engine, "garbage")
+    assert login(client, password="password123").status_code == 401
+    assert stored(db_engine) == "garbage"
+
+
+def test_short_old_password_logs_in_and_is_rehashed(client, ann, db_engine):
+    old = OLD.hash("short")
+    set_hash(db_engine, old)
+    assert login(client, password="short").status_code == 303
+    new = stored(db_engine)
+    assert new != old and needs_rehash(new) is False and verify_password("short", new)
+
+
+def test_database_failure_during_rehash_does_not_break_login(client, ann, db_engine, caplog, monkeypatch):
+    old = OLD.hash("password123")
+    set_hash(db_engine, old)
+
+    def boom(*a, **k):
+        raise SQLAlchemyError("db down")
+
+    monkeypatch.setattr(auth_module, "update_password_hash_if_unchanged", boom)
+    with caplog.at_level(logging.DEBUG):
+        r = login(client, password="password123")
+    assert r.status_code == 303 and r.headers["location"] == "/"
+    assert client.get("/submit").status_code == 200
+    assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+    assert stored(db_engine) == old
+    no_leak(db_engine, caplog, "password123", old)
+
+
+def test_hashing_failure_during_rehash_does_not_break_login(client, ann, db_engine, caplog, monkeypatch):
+    old = OLD.hash("password123")
+    set_hash(db_engine, old)
+
+    def boom(*a, **k):
+        raise argon2.exceptions.HashingError("no memory")
+
+    monkeypatch.setattr(auth_module, "hash_existing_password", boom)
+    with caplog.at_level(logging.DEBUG):
+        r = login(client, password="password123")
+    assert r.status_code == 303 and client.get("/submit").status_code == 200
+    assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+    assert stored(db_engine) == old
+    no_leak(db_engine, caplog, "password123", old)
+
+
+def test_rehash_is_compare_and_set(client, ann, db_engine, caplog, monkeypatch):
+    old = OLD.hash("password123")
+    other = PasswordHasher(time_cost=2, memory_cost=8, parallelism=1).hash("password123")
+    set_hash(db_engine, old)
+    real = auth_module.hash_existing_password
+
+    def hash_then_race(password):
+        new = real(password)
+        set_hash(db_engine, other)  # another request replaces the hash before our write
+        return new
+
+    monkeypatch.setattr(auth_module, "hash_existing_password", hash_then_race)
+    r = login(client, password="password123")
+    assert r.status_code == 303 and client.get("/submit").status_code == 200
+    assert stored(db_engine) == other
+    no_leak(db_engine, caplog, "password123", old, other)
+
+
+def test_two_logins_in_a_row(client, ann, db_engine):
+    set_hash(db_engine, OLD.hash("password123"))
+    assert login(client, password="password123").status_code == 303
+    first = stored(db_engine)
+    client.post("/logout")
+    assert login(client, password="password123").status_code == 303
+    assert stored(db_engine) == first

@@ -93,3 +93,11 @@ def test_find_user_by_email(db_engine):
 def test_find_unknown_or_empty_returns_none(db_engine, email):
     create_user("ann@example.com", PW, "owner", engine=db_engine)
     assert find_user_by_email(email, engine=db_engine) is None
+
+
+def test_create_user_makes_a_current_hash(db_engine):
+    from app.passwords import needs_rehash
+    from app.users import create_user
+
+    user = create_user("zed@example.com", "correct horse", "member", engine=db_engine)
+    assert needs_rehash(user.password_hash) is False

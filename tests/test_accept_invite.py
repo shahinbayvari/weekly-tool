@@ -206,3 +206,13 @@ def test_token_not_in_app_logs_or_error_pages(client, db_engine, owner_id, caplo
     assert weak.text.count("SECRETTOKEN-abc") == 1 and f'action="{path}"' in weak.text
     assert_not_valid(again_get, "SECRETTOKEN-abc")
     assert_not_valid(again_post, "SECRETTOKEN-abc")
+
+
+def test_accepted_invite_creates_a_current_hash(client, db_engine, owner_id):
+    from app.passwords import needs_rehash
+
+    t = add_invite(db_engine, owner_id)
+    client.post(f"/invite/{t}", data=form())
+    with Session(db_engine) as s:
+        h = s.scalar(select(User.password_hash).where(User.email == INVITEE))
+    assert needs_rehash(h) is False
